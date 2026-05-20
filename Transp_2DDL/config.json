@@ -1,0 +1,27 @@
+{
+  "conditions": {
+    "NE": "NE",
+    "OL": "OL",
+    "CL": "CL",
+    "OLCL": "OLCL"
+  },
+  "block_per_condition": {
+    "NE": 1, 
+    "OL": 1,
+    "CL": 1,
+    "OLCL": 1
+  },
+    "subject_number":17,
+    "movement_per_block":80,
+    "sample_rate_kin":100,
+    "sample_rate_rob":100,
+    "sample_rate_emg": 2000,
+    "maxblockcond":  1,
+  "conditions_without_block_number_in_file_names": [
+    "NE",
+    "OL",
+    "CL",
+    "OLCL"
+  ],
+    "elbow_method" : "real"
+}

@@ -1,0 +1,9 @@
+# Ignore files that are not source code or .dll
+all_params/
+Transp_2DDL/data
+Transp_2DDL/raw_data
+**.zip
+**.pdf
+**.svg
+**.txt
+**.csv
