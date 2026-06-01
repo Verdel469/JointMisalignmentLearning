@@ -229,7 +229,7 @@ def get_all_aligned_hr_joints_mvts_one_subj(df_one_subj_h, df_one_subj_r, subj =
             lmvt = len(q_sh_a)
             arm_vec = np.array([arm_length]*lmvt)
             farm_vec = np.array([farm_length]*lmvt)
-            subj_vec = np.array([subject]*lmvt)
+            subj_vec = np.array([subj]*lmvt)
             mvt_vec = np.array([i]*lmvt)
             aligned_mvt = np.concat((q_3_a.reshape(lmvt,1), q_4_a.reshape(lmvt,1),
                                     q_3_dot_a.reshape(lmvt,1), q_4_dot_a.reshape(lmvt,1), forces_a,

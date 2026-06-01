@@ -2,16 +2,13 @@
 # General
 import numpy as np
 
-# Local
-import motor_control_tools.inverse_dynamics as mct_invDyn
-import motor_control_tools.signal as mct_sig
 
 def get_ablated_input(input_mat, data_to_remove = False, forceLoc = "wrist"):
     """
     Function returning simplified input matrix for ablation studies.
 
     Args:
-      - input_mat      : len(batch)xIO array; Full input matrix [q3,q4,dq3,dq4,FT_arm,FT_wrist,l_a,l_fa,mvt,subj,output]
+      - input_mat      : len(batch)xIO array; Full input matrix [q3,q4,dq3,dq4,(FT_arm),FT_wrist,l_a,l_fa,mvt,subj,output]
       - data_to_remove : string             ; Type of data to remove for ablation
     """
     if not data_to_remove:
@@ -56,19 +53,20 @@ def get_ablated_input(input_mat, data_to_remove = False, forceLoc = "wrist"):
         return input_mat
 
 
-def get_folds(input_mat, nb_folds, subj_list):
+def get_folds(input_mat, nb_folds, subj_col = -5):
     """
     Function returning k-folds for training and evaluation of the
     exoskeleton-to-human mapping.
 
     Args:
-      - input_mat  : len(batch)xIO array; Ablated input matrix, also includes variables to predict
-      - nb_folds   : int                ; Number of folds (applied at the subjects level)
-      - subj_list  : 1xNb_subjects array; List of subjects to apply k-folding
+      - input_mat : len(batch)xIO array ; Ablated input matrix, also includes variables to predict
+      - nb_folds  : int                 ; Number of folds (applied at the subjects level)
+      - subj_col  : int                 ; Index of the column containing the subjects' Ids
     Output:
       - folded_data : dict; dictionnary of k-folded data
     """
     ## Initialization
+    subj_list = np.unique(input_mat[:,subj_col])
     if len(subj_list) % nb_folds != 0:
         print("Number of subjects is not divisible by number of folds.")
         return False
@@ -76,13 +74,13 @@ def get_folds(input_mat, nb_folds, subj_list):
     if nb_folds == "LOO":
         fold_size = 1
     else:
-        fold_size = len(subj_list) / nb_folds
+        fold_size = int(len(subj_list) / nb_folds)
 
     # Random model
     rng = np.random.default_rng()
 
     # Create local variables
-    subj_list_unused = subj_list
+    subj_list_unused = subj_list.copy()
     subj_list_used = []
     folded_data = {}
 
@@ -90,7 +88,7 @@ def get_folds(input_mat, nb_folds, subj_list):
     for i in range(1, nb_folds + 1):
         # Get random evaluation fold
         eval_fold = rng.choice(subj_list_unused, size = fold_size, replace = False)
-        eval_fold_mask = np.isin(input_mat[:,-5], eval_fold)
+        eval_fold_mask = np.isin(input_mat[:,subj_col], eval_fold)
         eval_data_fold = input_mat[eval_fold_mask]
 
         # Remove already used subjects from list
@@ -98,16 +96,19 @@ def get_folds(input_mat, nb_folds, subj_list):
 
         # Get corresponding training fold
         training_fold = shortlist_subj
-        training_fold_mask = np.isin(input_mat[:,-5], training_fold)
+        training_fold_mask = np.isin(input_mat[:,subj_col], training_fold)
         training_data_fold = input_mat[training_fold_mask]
 
         # Build dict for the current fold
-        fold_i = {"index": i, "train_subjs": training_fold, "train_data": training_data_fold, "eval_subjs": eval_fold, "eval_data": eval_data_fold}
-        folded_data.update(fold_i)
+        fold_i = {"train_subjs": training_fold, "train_data": training_data_fold, "eval_subjs": eval_fold, "eval_data": eval_data_fold}
+        fold_i_name = "fold" + str(i)
+        folded_data.update({fold_i_name: fold_i})
 
         # Save list of remaining subjects for evaluation
         subj_list_used.extend(eval_fold)
         subj_list_unused = list(set(subj_list)-set(subj_list_used))
+
+    return folded_data
 
 
 
