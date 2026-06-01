@@ -114,8 +114,8 @@ def get_aligned_hr_joints_mvt(q_sh, q_sh_dot, q_el, q_el_dot, q_3, q_3_dot, q_4,
     
     ## Get common bounds
     bounds_human, bounds_robot = compare_bounds(bounds_human, bounds_robot, both = True)
-    print("Bounds human: ", bounds_human)
-    print("Bounds robot: ", bounds_robot)
+    #print("Bounds human: ", bounds_human)
+    #print("Bounds robot: ", bounds_robot)
     
     ## Get bounded joints and force profiles
     # Human
@@ -129,7 +129,7 @@ def get_aligned_hr_joints_mvt(q_sh, q_sh_dot, q_el, q_el_dot, q_3, q_3_dot, q_4,
     q_3_dot_b = q_3_dot[bounds_robot[0]:bounds_robot[1]]
     q_4_dot_b = q_4_dot[bounds_robot[0]:bounds_robot[1]]
     forces_b = forces[bounds_robot[0]:bounds_robot[1], :]
-    print("Bounded forces shape: ", np.shape(forces_b))
+    #print("Bounded forces shape: ", np.shape(forces_b))
     
     ## Extend profiles at each joint
     q_sh_be, q_sh_dot_be, q_3_be, q_3_dot_be = extend_bounded_profiles(q_sh_b, q_sh_dot_b, q_3_b, q_3_dot_b)
@@ -159,7 +159,7 @@ def get_aligned_hr_joints_mvt(q_sh, q_sh_dot, q_el, q_el_dot, q_3, q_3_dot, q_4,
 # q_3_dot_a = []
 # q_4_dot_a = []
 
-def get_all_aligned_hr_joints_mvts_one_subj(df_one_subj_h, df_one_subj_r, subj = "S1", cut = 0.05):
+def get_all_aligned_hr_joints_mvts_one_subj(df_one_subj_h, df_one_subj_r, subj = "S1", cut = 0.05, forceLoc = "wrist"):
     """
     This function allows to loop on all movements of one subject to
     build the matrix then used for the training and evaluation of the
@@ -170,6 +170,7 @@ def get_all_aligned_hr_joints_mvts_one_subj(df_one_subj_h, df_one_subj_r, subj =
     farm_length = 0.21 #df_one_subj_h['farm_length'].mean().iloc[0]
     str_subject = subj
     subject = int(str_subject[1:])
+    print(subject)
     
     # Prepare the matrix for all movements storage
     all_mvts_one_subj = np.empty((1,24))
@@ -197,12 +198,13 @@ def get_all_aligned_hr_joints_mvts_one_subj(df_one_subj_h, df_one_subj_r, subj =
         q_3_dot = -mct.signal.diff_keep_length(q_3, 100, spec_t = False)
         q_4_dot = -mct.signal.diff_keep_length(q_4, 100, spec_t = False)
         # Get human-robot interaction forces
-        fx_a = rdf_mov['Fx_A'].values
-        fy_a = rdf_mov['Fy_A'].values
-        fz_a = rdf_mov['Fz_A'].values
-        tx_a = rdf_mov['Tx_A'].values
-        ty_a = rdf_mov['Ty_A'].values
-        tz_a = rdf_mov['Tz_A'].values
+        if forceLoc == "both":
+            fx_a = rdf_mov['Fx_A'].values
+            fy_a = rdf_mov['Fy_A'].values
+            fz_a = rdf_mov['Fz_A'].values
+            tx_a = rdf_mov['Tx_A'].values
+            ty_a = rdf_mov['Ty_A'].values
+            tz_a = rdf_mov['Tz_A'].values
         fx_fa = rdf_mov['Fx_FA'].values
         fy_fa = rdf_mov['Fy_FA'].values
         fz_fa = rdf_mov['Fz_FA'].values
@@ -210,10 +212,14 @@ def get_all_aligned_hr_joints_mvts_one_subj(df_one_subj_h, df_one_subj_r, subj =
         ty_fa = rdf_mov['Ty_FA'].values
         tz_fa = rdf_mov['Tz_FA'].values
         # Concatenate forces in one matrix
-        forces = np.concat((fx_a.reshape(len(fx_a),1), fy_a.reshape(len(fy_a),1), fz_a.reshape(len(fz_a),1),
-                            tx_a.reshape(len(tx_a),1), ty_a.reshape(len(ty_a),1), tz_a.reshape(len(tz_a),1),
-                            fx_fa.reshape(len(fx_fa),1), fy_fa.reshape(len(fy_fa),1), fz_fa.reshape(len(fz_fa),1),
-                            tx_fa.reshape(len(tx_fa),1), ty_fa.reshape(len(ty_fa),1), tz_fa.reshape(len(tz_fa),1)), axis = 1)
+        if forceLoc == "both":
+            forces = np.concat((fx_a.reshape(len(fx_a),1), fy_a.reshape(len(fy_a),1), fz_a.reshape(len(fz_a),1),
+                                tx_a.reshape(len(tx_a),1), ty_a.reshape(len(ty_a),1), tz_a.reshape(len(tz_a),1),
+                                fx_fa.reshape(len(fx_fa),1), fy_fa.reshape(len(fy_fa),1), fz_fa.reshape(len(fz_fa),1),
+                                tx_fa.reshape(len(tx_fa),1), ty_fa.reshape(len(ty_fa),1), tz_fa.reshape(len(tz_fa),1)), axis = 1)
+        else:
+            forces = np.concat((fx_fa.reshape(len(fx_fa),1), fy_fa.reshape(len(fy_fa),1), fz_fa.reshape(len(fz_fa),1),
+                                tx_fa.reshape(len(tx_fa),1), ty_fa.reshape(len(ty_fa),1), tz_fa.reshape(len(tz_fa),1)), axis = 1)
 
         # Get aligned human-robot movement joints data
         q_sh_a, q_sh_dot_a, q_el_a, q_el_dot_a, q_3_a, q_3_dot_a, q_4_a, q_4_dot_a, forces_a = get_aligned_hr_joints_mvt(q_sh, q_sh_dot, q_el, q_el_dot, q_3, q_3_dot, q_4, q_4_dot, forces, cut = cut)
@@ -225,12 +231,12 @@ def get_all_aligned_hr_joints_mvts_one_subj(df_one_subj_h, df_one_subj_r, subj =
             farm_vec = np.array([farm_length]*lmvt)
             subj_vec = np.array([subject]*lmvt)
             mvt_vec = np.array([i]*lmvt)
-            aligned_mvt = np.concat((q_3_a.reshape(lmvt,1), q_3_dot_a.reshape(lmvt,1),
-                                    q_4_a.reshape(lmvt,1), q_4_dot_a.reshape(lmvt,1), forces_a,
-                                    arm_vec.reshape(lmvt,1),farm_vec.reshape(lmvt,1),
+            aligned_mvt = np.concat((q_3_a.reshape(lmvt,1), q_4_a.reshape(lmvt,1),
+                                    q_3_dot_a.reshape(lmvt,1), q_4_dot_a.reshape(lmvt,1), forces_a,
+                                    arm_vec.reshape(lmvt,1), farm_vec.reshape(lmvt,1),
+                                    mvt_vec.reshape(lmvt,1), subj_vec.reshape(lmvt,1),
                                     q_sh_a.reshape(lmvt,1), q_sh_dot_a.reshape(lmvt,1),
-                                    q_el_a.reshape(lmvt,1), q_el_dot_a.reshape(lmvt,1),
-                                    subj_vec.reshape(lmvt,1), mvt_vec.reshape(lmvt,1)), axis = 1)
+                                    q_el_a.reshape(lmvt,1), q_el_dot_a.reshape(lmvt,1)), axis = 1)
             
             # Store movement in the subject's matrix
             all_mvts_one_subj = np.concat((all_mvts_one_subj, aligned_mvt), axis = 0)

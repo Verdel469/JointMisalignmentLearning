@@ -6,9 +6,19 @@ import numpy as np
 import motor_control_tools.kinematic as mct_kin
 import motor_control_tools.signal as mct_sig
 
-def inverse_dynamics(j_pos, anthropo, j_vel = [], j_acc = [], duration = 1):
+def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], duration = 1):
     """
-    Compute human torques (2-dof arm) using inverse dynamics for a given joints trajectory.
+    Compute human torques (2-dof arm) using inverse dynamics for a given
+    joints trajectory.
+
+    Args:
+      - anthropo : dict              ; contains anthropometric data of a subject
+      - j_pos    : 2xlen(batch) array; shoulder & elbow joints positions
+      - j_vel    : 2xlen(batch) array; shoulder & elbow joints velocities
+      - j_acc    : 2xlen(batch) array; shoulder & elbow joints accelerations
+      - duration : 1x1 float         ; movement duration
+    Outputs:
+      - torques  : 2xlen(batch) array; estimated shoulder & elbow joints torques
     """
     ## Get velocity and acceleration if not provided
     if not j_vel:
