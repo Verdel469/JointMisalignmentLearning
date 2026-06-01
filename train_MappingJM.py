@@ -22,7 +22,7 @@ def train_MappingJM(folded_data, type, params):
 
     if type == "MVLR":
         models = train_MVLR_Mappings(folded_data, params)
-    if type == "MVPR":
+    elif type == "MVPR":
         models = train_MVPR_Mappings(folded_data, params)
     elif type == "FNO":
         models = train_FNO_Mappings(folded_data, params)
@@ -53,8 +53,8 @@ def train_MVLR_Mappings(folded_data, params):
         fold_i = "fold" + str(i)
         train_data_fold_i = folded_data.get(fold_i).get("train_data")
         # Get inputs and outputs
-        input_data  = train_data_fold_i[:,:-6]
-        output_data = train_data_fold_i[:,-6:-2]
+        input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
+        output_data = np.array(train_data_fold_i[:,-6:-2], dtype = np.float64)
         # Fit MVLR model
         modelFold_i = LinearRegression()
         modelFold_i.fit(input_data, output_data)
@@ -84,8 +84,8 @@ def train_MVPR_Mappings(folded_data, params):
         fold_i = "fold" + str(i)
         train_data_fold_i = folded_data.get(fold_i).get("train_data")
         # Get inputs and outputs
-        input_data  = train_data_fold_i[:,:-6]
-        output_data = train_data_fold_i[:,-6:-2]
+        input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
+        output_data = np.array(train_data_fold_i[:,-6:-2], dtype = np.float64)
         # Preprocess and fit MVPR model
         polyFeatures = PolynomialFeatures(degree = degree)
         input_polyData = polyFeatures.fit_transform(input_data)
@@ -156,8 +156,8 @@ def get_tensorsFromMat(train_data_fold_i):
         for mvt in subj_data_fold_i[:,-2].unique():
             subj_mvt_data_fold_i = subj_data_fold_i[subj_data_fold_i[:,-2] == mvt]
             # Store movement data
-            input_data.append(subj_mvt_data_fold_i[:,:-6])
-            output_data.append(subj_mvt_data_fold_i[:,-6:-2])
+            input_data.append(np.array(subj_mvt_data_fold_i[:,:-6], dtype = np.float64))
+            output_data.append(np.array(subj_mvt_data_fold_i[:,-6:-2], dtype = np.float64))
 
     ## Get input and output dimmension
     d_in  = input_data.shape[-1]
