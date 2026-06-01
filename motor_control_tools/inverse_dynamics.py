@@ -3,7 +3,6 @@
 import numpy as np
 
 # Local
-import motor_control_tools.kinematic as mct_kin
 import motor_control_tools.signal as mct_sig
 
 def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], duration = 1):
