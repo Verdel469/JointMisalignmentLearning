@@ -1,22 +1,23 @@
 ## Imports
 # General
 import numpy as np
+import pandas as pd
+import json
 
 
-def get_data(type):
+def get_data(type, params):
     """
     Function to import data from experiments or build matrix of simulated data for testing.
 
     Args:
       - type : string ; "FAKE": generate random data, "CALIB": get calibration expe data, "ASSIST": get assist expe data
     Output:
-      - data : 18xNsamples ; Full data matrix with headers: [q3,q4,dq3,dq4,FT_wrist(6),l_a,l_fa,qs,qe,dqs,dqe,mvt,subj]
+      - data : Nsamplesx18 array ; Full data matrix with headers: [q3,q4,dq3,dq4,FT_wrist(6),l_a,l_fa,qs,qe,dqs,dqe,mvt,subj]
     """
     if type == "FAKE":
         data = get_fake_data()
     elif type == "CALIB":
-        data = None
-        print("CALIB experiment not yet handled...")
+        data = get_calib_data(params)
     elif type == "ASSIST":
         data = None
         print("ASSIST experiment not yet handled...")
@@ -57,3 +58,89 @@ def get_fake_data(nb_subj = 20, len_subj = 10000):
             all_fake_data = np.vstack((all_fake_data,fake_subj_data))
     
     return all_fake_data
+
+def get_calib_data(params):
+    """
+    Function building the complete data matrix for the human and robot.
+
+    Args:
+      - params : dict ; Set of parameters regarding the CALIB experiment
+    Output:
+      - data : Nsamplesx18 array ; Full data matrix with headers: [q3,q4,dq3,dq4,FT_wrist(6),l_a,l_fa,qs,qe,dqs,dqe,trial,subj]
+    """
+    ## Initialization
+    path_expe      = params.get('path')
+    nb_subj        = params.get('nb_subj')
+    cond           = params.get('condition')
+    nb_trials      = params.get('nb_trials')
+    data_type_list = params.get('dataTypes')
+    list_variables = params.get('listOfVariables')
+    duration_idx   = params.get('durationIndex')
+    list_dtypes    = []
+    list_trials    = []
+    list_subjs     = []
+
+    ## Loop over subjects, conditions, and trials
+    for i in range(0, nb_subj):
+        # Path to subject
+        subj = 'S' + i
+        path_subj = path_expe + '/' + subj
+        
+        # Get subject informations
+        subj_info_path = path_subj + '/' + subj + '.json'
+        with open(subj_info_path, 'r', encoding='utf-8') as file:
+            subj_info = json.load(file)
+        
+        # Get anthropometrics
+        l_a  = subj_info.get('measures').get('arm')
+        l_fa = subj_info.get('measures').get('forearm')
+
+        # Path to condition [SJ: single-joint; MJ: multi-joint]
+        path_cond = path_subj + '/' + cond
+
+        for j in range(0, nb_trials):
+            # Path to trial
+            path_trial = path_cond + '/T' + j
+
+            for type in data_type_list:
+                # Get human, robot and force data
+                path_data = path_trial + '/' + type + '.csv'
+                data = pd.read_csv(path_data)
+                list_dtypes.append(data)
+
+            # Concatenate al data of the trial
+            data_one_trial = pd.concat(list_dtypes, axis = 1)
+
+            # Keep only relevant variables
+            data_one_trial = data_one_trial[list_variables]
+
+            # Add anthropo, trial and subject identifiers
+            data_one_trial['l_a']   = l_a
+            data_one_trial['l_fa']  = l_fa
+            data_one_trial['trial'] = j
+            data_one_trial['subj']  = subj
+
+            # Reorder columns
+            data_one_trial.insert(10, 'l_a', df.pop('l_a'))
+            data_one_trial.insert(11, 'l_fa', df.pop('l_fa'))
+            data_one_trial.insert(-2, 'trial', df.pop('trial'))
+            data_one_trial.insert(-1, 'subj', df.pop('subj'))
+
+            # Keep slice of data to ensure common durations
+            data_one_trial_slice = data_one_trial.iloc[:duration_idx]
+
+            # Store trial
+            list_trials.append(data_one_trial_slice)
+
+        # Concatenate all trials
+        df_one_subj = pd.concat(list_trials, axis = 0)
+
+        # Store subject
+        list_subjs.append(df_one_subj)
+
+    # Concatenate all subjects
+    df_all_data = pd.concat(list_subjs, axis = 0)
+
+    # Return complete array
+    return df_all_data.to_numpy()
+
