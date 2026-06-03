@@ -1,5 +1,7 @@
 ## Imports
 # General
+import os
+import pickle
 import numpy as np
 import pandas as pd
 import json
@@ -17,7 +19,17 @@ def get_data(type, params):
     if type == "FAKE":
         data = get_fake_data()
     elif type == "CALIB":
-        data = get_calib_data(params)
+        save_path_calib = params.get('save_path')
+        if os.path.isfile(save_path_calib):
+            with open(save_path_calib, 'rb') as file:
+                data = pickle.load(file)
+            print('Loaded calibration data from pickle.')
+        else:
+            data = get_calib_data(params)
+            print('Loaded calibration data from files...')
+            with open(save_path_calib, 'wb') as file:
+                pickle.dump(data, file)
+            print('Saved calibration data to pickle')
     elif type == "ASSIST":
         data = None
         print("ASSIST experiment not yet handled...")
@@ -76,14 +88,12 @@ def get_calib_data(params):
     data_type_list = params.get('dataTypes')
     list_variables = params.get('listOfVariables')
     duration_idx   = params.get('durationIndex')
-    list_dtypes    = []
-    list_trials    = []
     list_subjs     = []
 
     ## Loop over subjects, conditions, and trials
     for i in range(0, nb_subj):
         # Path to subject
-        subj = 'S' + i
+        subj = 'S' + str(i+1)
         path_subj = path_expe + '/' + subj
         
         # Get subject informations
@@ -98,21 +108,23 @@ def get_calib_data(params):
         # Path to condition [SJ: single-joint; MJ: multi-joint]
         path_cond = path_subj + '/' + cond
 
+        # Empty list to store trials
+        list_trials = []
         for j in range(0, nb_trials):
             # Path to trial
-            path_trial = path_cond + '/T' + j
-
+            path_trial = path_cond + '/T' + str(j)
+            # Empty list to store data
+            list_dtypes = []
             for type in data_type_list:
                 # Get human, robot and force data
                 path_data = path_trial + '/' + type + '.csv'
                 data = pd.read_csv(path_data)
+                if type == 'humanVelocities':
+                    data = data.rename(columns = {'shoulder_elv': 'dshoulder_elv', 'elbow_flexion': 'delbow_flexion'})
                 list_dtypes.append(data)
 
             # Concatenate al data of the trial
             data_one_trial = pd.concat(list_dtypes, axis = 1)
-
-            # Keep only relevant variables
-            data_one_trial = data_one_trial[list_variables]
 
             # Add anthropo, trial and subject identifiers
             data_one_trial['l_a']   = l_a
@@ -120,17 +132,28 @@ def get_calib_data(params):
             data_one_trial['trial'] = j
             data_one_trial['subj']  = subj
 
+            # Keep only relevant variables
+            data_one_trial = data_one_trial[list_variables]
+
             # Reorder columns
-            data_one_trial.insert(10, 'l_a', df.pop('l_a'))
-            data_one_trial.insert(11, 'l_fa', df.pop('l_fa'))
-            data_one_trial.insert(-2, 'trial', df.pop('trial'))
-            data_one_trial.insert(-1, 'subj', df.pop('subj'))
+            data_one_trial.insert(10, 'l_a', data_one_trial.pop('l_a'))
+            data_one_trial.insert(11, 'l_fa', data_one_trial.pop('l_fa'))
+            data_one_trial.insert(16, 'trial', data_one_trial.pop('trial'))
+            data_one_trial.insert(17, 'subj', data_one_trial.pop('subj'))
+
+            # Copy dataframe to new variable to avoid fragmentation in memory when using insert
+            data_one_trial_unfrag = data_one_trial.copy()
 
             # Keep slice of data to ensure common durations
-            data_one_trial_slice = data_one_trial.iloc[:duration_idx]
+            data_one_trial_slice = data_one_trial_unfrag.iloc[0:duration_idx]
 
             # Store trial
-            list_trials.append(data_one_trial_slice)
+            list_trials.append(data_one_trial_slice.copy())
+
+            # Reset dataframes before next iteration
+            data_one_trial = pd.DataFrame({})
+            data_one_trial_unfrag = pd.DataFrame({})
+            data_one_trial_slice = pd.DataFrame({})
 
         # Concatenate all trials
         df_one_subj = pd.concat(list_trials, axis = 0)
