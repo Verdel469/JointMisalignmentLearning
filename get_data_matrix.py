@@ -73,15 +73,16 @@ def get_fake_data(nb_subj = 20, len_subj = 10000):
 
 def get_calib_data(params):
     """
-    Function building the complete data matrix for the human and robot.
+    Function building the complete data matrix for the human and robot for the calibration experiment.
 
     Args:
       - params : dict ; Set of parameters regarding the CALIB experiment
     Output:
-      - data : Nsamplesx18 array ; Full data matrix with headers: [q3,q4,dq3,dq4,FT_wrist(6),l_a,l_fa,qs,qe,dqs,dqe,trial,subj]
+      - data : Nsamplesx19 array ; Full data matrix with headers: [q3,q4,dq3,dq4,FT_wrist(6),l_a,l_fa,qs,qe,dqs,dqe,trial,subj,expe]
     """
     ## Initialization
     path_expe      = params.get('path')
+    name_expe      = params.get('expeName')
     nb_subj        = params.get('nb_subj')
     cond           = params.get('condition')
     nb_trials      = params.get('nb_trials')
@@ -131,6 +132,7 @@ def get_calib_data(params):
             data_one_trial['l_fa']  = l_fa
             data_one_trial['trial'] = j
             data_one_trial['subj']  = subj
+            data_one_trial['expe']  = name_expe
 
             # Keep only relevant variables
             data_one_trial = data_one_trial[list_variables]
@@ -140,6 +142,7 @@ def get_calib_data(params):
             data_one_trial.insert(11, 'l_fa', data_one_trial.pop('l_fa'))
             data_one_trial.insert(16, 'trial', data_one_trial.pop('trial'))
             data_one_trial.insert(17, 'subj', data_one_trial.pop('subj'))
+            data_one_trial.insert(18, 'expe', data_one_trial.pop('expe'))
 
             # Copy dataframe to new variable to avoid fragmentation in memory when using insert
             data_one_trial_unfrag = data_one_trial.copy()
@@ -167,3 +170,119 @@ def get_calib_data(params):
     # Return complete array
     return df_all_data.to_numpy()
 
+def get_assist_data(params):
+    """
+    Function building the complete data matrix for the human and robot for the assistance experiment.
+
+    Args:
+      - params : dict ; Set of parameters regarding the ASSIST experiment
+    Output:
+      - data : Nsamplesx19 array ; Full data matrix with headers: [q3,q4,dq3,dq4,FT_wrist(6),l_a,l_fa,qs,qe,dqs,dqe,trial,subj,expe]
+    """
+    ## Initialization
+    path_expe      = params.get('path')
+    name_expe      = params.get('expeName')
+    subjList       = params.get('subjList')
+    cond_list      = params.get('conditions')
+    nb_trials      = params.get('nb_trials')
+    phases_list    = params.get('phases')
+    data_type_list = params.get('dataTypes')
+    list_variables = params.get('listOfVariables')
+    duration_idx   = params.get('durationIndex')
+
+    ## Loop over subjects, conditions, and trials
+    list_subjs = []
+    for subj in subjList:
+        # Path to subject
+        path_subj = path_expe + '/' + subj + '/Assist2/'
+        
+        # Get subject informations
+        subj_info_path = path_expe + '/' + subj + '/' + subj + '.json'
+        with open(subj_info_path, 'r', encoding='utf-8') as file:
+            subj_info = json.load(file)
+
+        # Get anthropometrics
+        l_a  = subj_info.get('measures').get('arm')
+        l_fa = subj_info.get('measures').get('forearm')
+
+        # Path to condition [T: transparent; ES: EMG simple; EG: EMG gravity]
+        list_conds = []
+        for cond in cond_list:
+            path_cond = path_subj + '/' + cond
+            # Empty list to store trials
+            list_trials = []
+            for j in range(0, nb_trials):
+                # Path to trial
+                path_trial = path_cond + '/mov_' + str(j)
+                # Empty list to store movement phases
+                list_phases =  []
+                for phase in phases_list:
+                    # Path to phase
+                    path_phase = path_trial + '/' + phase
+                    # Empty list to store data
+                    list_dtypes = []
+                    for type in data_type_list:
+                        # Get human, robot and force data
+                        path_data = path_phase + '/' + type + '.csv'
+                        data = pd.read_csv(path_data)
+                        if type == 'humanVelocities':
+                            data = data.rename(columns = {'shoulder_elv': 'dshoulder_elv', 'elbow_flexion': 'delbow_flexion'})
+                        list_dtypes.append(data)
+
+                    # Concatenate al data of the trial
+                    data_one_phase = pd.concat(list_dtypes, axis = 1)
+                    
+                    # Add data to phase list
+                    list_phases.append(data_one_phase)
+                
+                # Concatenate all trials
+                data_one_trial = pd.concat(list_phases, axis = 0)
+
+                # Add anthropo, trial and subject identifiers
+                data_one_trial['l_a']   = l_a
+                data_one_trial['l_fa']  = l_fa
+                data_one_trial['trial'] = j
+                data_one_trial['subj']  = subj
+                data_one_trial['expe']  = name_expe
+
+                # Keep only relevant variables
+                data_one_trial = data_one_trial[list_variables]
+
+                # Reorder columns
+                data_one_trial.insert(10, 'l_a', data_one_trial.pop('l_a'))
+                data_one_trial.insert(11, 'l_fa', data_one_trial.pop('l_fa'))
+                data_one_trial.insert(16, 'trial', data_one_trial.pop('trial'))
+                data_one_trial.insert(17, 'subj', data_one_trial.pop('subj'))
+                data_one_trial.insert(18, 'expe', data_one_trial.pop('expe'))
+
+                # Copy dataframe to new variable to avoid fragmentation in memory when using insert
+                data_one_trial_unfrag = data_one_trial.copy()
+
+                # Keep slice of data to ensure common durations
+                data_one_trial_slice = data_one_trial_unfrag.iloc[0:duration_idx]
+
+                # Store trial
+                list_trials.append(data_one_trial_slice.copy())
+
+                # Reset dataframes before next iteration
+                data_one_trial = pd.DataFrame({})
+                data_one_trial_unfrag = pd.DataFrame({})
+                data_one_trial_slice = pd.DataFrame({})
+            
+            # Concatenate al data of the trial
+            data_one_cond = pd.concat(list_trials, axis = 0)
+            
+            # Add data to phase list
+            list_conds.append(data_one_cond)
+
+        # Concatenate all trials
+        df_one_subj = pd.concat(list_conds, axis = 0)
+
+        # Store subject
+        list_subjs.append(df_one_subj)
+
+    # Concatenate all subjects
+    df_all_data = pd.concat(list_subjs, axis = 0)
+
+    # Return complete array
+    return df_all_data.to_numpy()

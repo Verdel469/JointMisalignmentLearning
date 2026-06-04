@@ -43,7 +43,7 @@ import pickle
 src_root = './SegmentedData/'
 # dst_root = './data_CALIB/'
 
-subjList = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S07', 'S09', 'S10', 'S11', 'S12', 'S14']
+subjList = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S09', 'S10', 'S12', 'S14']
 src_conds = ['EG', 'ES', 'T']
 src_phases = ['PE', 'PS', 'RE', 'RS']
 
@@ -63,7 +63,7 @@ for subject in subjList:
 
             for phase in src_phases:
                 src_phase = src_trial + phase + '/'
-                pathExoPos = src_phase + 'exoVelocities.csv'
+                pathExoPos = src_phase + 'wristSensor.csv'
 
                 if os.path.isfile(pathExoPos):
                     nb_present += 1
