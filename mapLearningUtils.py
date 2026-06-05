@@ -3,6 +3,45 @@
 import numpy as np
 
 
+def get_all_folded_ablated_data(data_calib, data_assist, params_prepro):
+    """
+    Function returning a complete dictionnary containing all the tested ablations and
+    foldings of data, with combined CALIB and ASSIST datasets. Data are still stored as
+    2D np.array at this stage.
+
+    Args:
+      - data_calib  : 493000x18 array; Full calibration experiment dataset
+      - data_assist : 227322x18 array; Full assistance experiment dataset
+    Output:
+      - all_folded_ablated_data : dict; Dictionnary containing all the combinations of folding and ablations
+    """
+    ## Initialization
+    ablationsList = params_prepro.get('ablations')
+    foldsList     = params_prepro.get('folds')
+    forceLoc      = params_prepro.get('forceLoc')
+
+    ## Loop over ablations and folds
+    all_folded_ablated_data = {}
+    for ablation in ablationsList:
+        # Get ablated matrices
+        ablated_calib  = get_ablated_input(data_calib, data_to_remove = ablation, forceLoc = forceLoc)
+        ablated_assist = get_ablated_input(data_assist, data_to_remove = ablation, forceLoc = forceLoc)
+        
+        dict_folds = {}
+        for fold in foldsList:
+            # Get ablated and folded data
+            folded_data = get_folds(ablated_calib, ablated_assist, fold, subj_col = -1)
+            # Update folds dictionnary
+            dict_folds.update({fold: folded_data})
+        
+        # Update final dictionnary
+        all_folded_ablated_data.update({ablation: dict_folds})
+
+    ## Return complete dictionnary
+    return all_folded_ablated_data
+
+
+
 def get_ablated_input(input_mat, data_to_remove = False, forceLoc = "wrist"):
     """
     Function returning simplified input matrix for ablation studies.
@@ -53,15 +92,16 @@ def get_ablated_input(input_mat, data_to_remove = False, forceLoc = "wrist"):
         return input_mat
 
 
-def get_folds(input_mat, nb_folds, subj_col = -5):
+def get_folds(calib_mat, assist_mat, nb_folds, subj_col = 0):
     """
     Function returning k-folds for training and evaluation of the
     exoskeleton-to-human mapping.
 
     Args:
-      - input_mat : len(batch)xIO array ; Ablated input matrix, also includes variables to predict
-      - nb_folds  : int                 ; Number of folds (applied at the subjects level)
-      - subj_col  : int                 ; Index of the column containing the subjects' Ids
+      - calib_mat  : len(mat)xIO array   ; Ablated calibration dataset
+      - assist_mat : len(mat)xIO array   ; Ablated assistance
+      - nb_folds   : string              ; Number of folds (applied at the subjects level)
+      - subj_col   : int                 ; Index of the column containing the subjects' Ids
     Output:
       - folded_data : dict; dictionnary of k-folded data
     """
