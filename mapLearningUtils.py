@@ -32,14 +32,14 @@ def get_all_folded_ablated_data(data_calib, data_assist, params_prepro):
             # Get ablated and folded data
             folded_data = get_folds(ablated_calib, ablated_assist, fold, subj_col = -1)
             # Update folds dictionnary
-            dict_folds.update({fold: folded_data})
+            fold_name = fold + '-fold'
+            dict_folds.update({fold_name: folded_data})
         
         # Update final dictionnary
         all_folded_ablated_data.update({ablation: dict_folds})
 
     ## Return complete dictionnary
     return all_folded_ablated_data
-
 
 
 def get_ablated_input(input_mat, data_to_remove = False, forceLoc = "wrist"):
@@ -49,6 +49,8 @@ def get_ablated_input(input_mat, data_to_remove = False, forceLoc = "wrist"):
     Args:
       - input_mat      : len(batch)xIO array; Full input matrix [q3,q4,dq3,dq4,(FT_arm),FT_wrist,l_a,l_fa,mvt,subj,output]
       - data_to_remove : string             ; Type of data to remove for ablation
+    Output:
+      - ablated : 2D array; Ablated matrix
     """
     if not data_to_remove:
         print("No ablation requested. Initial matrix is returned.")
@@ -99,55 +101,143 @@ def get_folds(calib_mat, assist_mat, nb_folds, subj_col = 0):
 
     Args:
       - calib_mat  : len(mat)xIO array   ; Ablated calibration dataset
-      - assist_mat : len(mat)xIO array   ; Ablated assistance
+      - assist_mat : len(mat)xIO array   ; Ablated assistance dataset
       - nb_folds   : string              ; Number of folds (applied at the subjects level)
       - subj_col   : int                 ; Index of the column containing the subjects' Ids
     Output:
       - folded_data : dict; dictionnary of k-folded data
     """
-    ## Initialization
-    subj_list = np.unique(input_mat[:,subj_col])
-    if len(subj_list) % nb_folds != 0:
-        print("Number of subjects is not divisible by number of folds.")
-        return False
-    
-    if nb_folds == "LOO":
-        fold_size = 1
-    else:
-        fold_size = int(len(subj_list) / nb_folds)
+    ## Initialize lists of subjects
+    subjListCalib  = np.unique(calib_mat[:,subj_col])
+    subjListAssist = np.unique(assist_mat[:,subj_col])
 
+    ## Get list of folds sizes for each dataset
+    fSizes_calib = get_fold_sizes(subjListCalib, nb_folds)
+    fSizes_assist = get_fold_sizes(subjListAssist, nb_folds)
+
+    ## Get and return dictionnary of folded data with training and evaluation sets
+    folded_data = get_eval_and_train_folds(calib_mat, assist_mat, fSizes_calib, fSizes_assist, subjListCalib, subjListAssist, subj_col = subj_col)
+    return folded_data
+
+
+def get_fold_sizes(subjList, nb_folds, expe = 'CALIB'):
+    """
+    Function computing the folds sizes depending on whether the number of folds
+    is a divider of the number of subjects or not.
+
+    Args:
+      - subjList : nbSubjsx1 array; Contains the list of subjects in a given dataset
+      - nb_folds : string         ; Number of folds to extract
+    Output:
+      - sizesList : nb_foldsx1 array; List of sizes of folds
+    """
+    ## Handle Leave-One-Out (LOO) case
+    if nb_folds == "LOO":
+        sizesList = np.array([1]*len(subjList))
+        return sizesList
+
+    ## Initialization
+    noDiv = False
+    nb_subjs = len(subjList)
+    nb_folds = int(nb_folds)
+
+    ## Check exact division
+    if nb_subjs % nb_folds != 0:
+        print('Number of subjects in ' + expe + ' is not divisible by number of folds. Adjustments will be performed...')
+        noDiv = True
+
+    ## Build list of sizes
+    if not noDiv:
+        fold_size = int(nb_subjs / nb_folds)
+        sizesList = np.array([fold_size]*nb_folds)
+    else:
+        # Get number of sujects to distribute in folds
+        nb_add_subj = nb_subjs % nb_folds
+        # Get basic size of folds
+        fold_size_nominal = nb_subjs // nb_folds
+        # Compute adjusted fold sizes
+        sizesList = [fold_size_nominal] * nb_folds
+        for i in range(0, nb_add_subj):
+            sizesList[i] += 1
+    
+    ## Return list of sizes
+    return sizesList
+
+
+def get_eval_and_train_folds(calib_mat, assist_mat, fSizes_calib, fSizes_assist, subjListCalib, subjListAssist, subj_col = 0):
+    """
+    Function computing the evaluation and training folds for pre-computed fold sizes.
+
+    Args:
+      - calib_mat      : len(mat)xIO array; Ablated calibration dataset
+      - assist_mat     : len(mat)xIO array; Ablated assistance dataset
+      - fSizes_calib   : nb_foldsx1 array ; List of sizes of folds for the calibration dataset
+      - fSizes_assist  : nb_foldsx1 array ; List of sizes of folds for the assistance dataset
+      - subjListCalib  : 17x1 string array; List of subjects for the calibration experiment
+      - subjListAssist : 17x1 string array; List of subjects for the assistance experiment
+    Output:
+      - folded_data : dictionnary; Dictionnary containning all folds for a given number of folds
+    """
+    ## Initialization
+    nb_folds = len(fSizes_calib)
+    subj_list_unused_calib  = subjListCalib.copy()
+    subj_list_unused_assist = subjListAssist.copy()
+    subj_list_used_calib    = []
+    subj_list_used_assist   = []
+    folded_data = {}
     # Random model
     rng = np.random.default_rng()
 
-    # Create local variables
-    subj_list_unused = subj_list.copy()
-    subj_list_used = []
-    folded_data = {}
-
     ## Extract folds
-    for i in range(1, nb_folds + 1):
-        # Get random evaluation fold
-        eval_fold = rng.choice(subj_list_unused, size = fold_size, replace = False)
-        eval_fold_mask = np.isin(input_mat[:,subj_col], eval_fold)
-        eval_data_fold = input_mat[eval_fold_mask]
+    for i in range(0, nb_folds):
+        # Get evaluation folds sizes
+        ev_fold_size_calib  = fSizes_calib[i]
+        ev_fold_size_assist = fSizes_assist[i]
 
-        # Remove already used subjects from list
-        shortlist_subj = list(set(subj_list)-set(eval_fold))
+        # Get random evaluation fold for calibration experiment
+        eval_fold_calib      = rng.choice(subj_list_unused_calib, size = ev_fold_size_calib, replace = False)
+        eval_fold_mask_calib = np.isin(calib_mat[:,subj_col], eval_fold_calib)
+        eval_data_fold_calib = calib_mat[eval_fold_mask_calib]
 
-        # Get corresponding training fold
-        training_fold = shortlist_subj
-        training_fold_mask = np.isin(input_mat[:,subj_col], training_fold)
-        training_data_fold = input_mat[training_fold_mask]
+        # Get random evaluation fold for assistance experiment
+        eval_fold_assist      = rng.choice(subj_list_unused_assist, size = ev_fold_size_assist, replace = False)
+        eval_fold_mask_assist = np.isin(assist_mat[:,subj_col], eval_fold_assist)
+        eval_data_fold_assist = calib_mat[eval_fold_mask_assist]
+
+        # Get full evaluation fold
+        eval_fold_i = np.concatenate((eval_data_fold_calib, eval_data_fold_assist), axis = 0)
+
+        # Remove already used subjects from calib assist lists
+        shortlist_subj_calib  = list(set(subjListCalib)-set(eval_fold_calib))
+        shortlist_subj_assist = list(set(subjListAssist)-set(eval_fold_assist))
+
+        # Get corresponding training fold for calib
+        training_fold_mask_calib = np.isin(calib_mat[:,subj_col], shortlist_subj_calib)
+        training_data_fold_calib = calib_mat[training_fold_mask_calib]
+
+        # Get corresponding training fold for assist
+        training_fold_mask_assist = np.isin(assist_mat[:,subj_col], shortlist_subj_assist)
+        training_data_fold_assist = assist_mat[training_fold_mask_assist]
+
+        # Get full training fold
+        train_fold_i = np.concatenate((training_data_fold_calib, training_data_fold_assist), axis = 0)
 
         # Build dict for the current fold
-        fold_i = {"train_subjs": training_fold, "train_data": training_data_fold, "eval_subjs": eval_fold, "eval_data": eval_data_fold}
-        fold_i_name = "fold" + str(i)
+        fold_i = {"train_subjs_calib": shortlist_subj_calib, "eval_subjs_calib": eval_fold_calib,
+                  "train_subjs_assist": shortlist_subj_assist, "eval_subjs_assist": eval_fold_assist,
+                  "train_data": train_fold_i, "eval_data": eval_fold_i}
+        fold_i_name = "fold" + str(i + 1)
         folded_data.update({fold_i_name: fold_i})
 
-        # Save list of remaining subjects for evaluation
-        subj_list_used.extend(eval_fold)
-        subj_list_unused = list(set(subj_list)-set(subj_list_used))
+        # Save list of remaining subjects for evaluation for calib
+        subj_list_used_calib.extend(eval_fold_calib)
+        subj_list_unused_calib = list(set(subjListCalib)-set(subj_list_used_calib))
 
+        # Save list of remaining subjects for evaluation for assist
+        subj_list_used_assist.extend(eval_fold_assist)
+        subj_list_unused_assist = list(set(subjListAssist)-set(subj_list_used_assist))
+
+    ## Return folded data for a given number of folds
     return folded_data
 
 
