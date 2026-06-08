@@ -1,6 +1,8 @@
 ## Imports
 # General
+import os
 import numpy as np
+import pickle
 
 
 def get_all_folded_ablated_data(data_calib, data_assist, params_prepro):
@@ -19,24 +21,36 @@ def get_all_folded_ablated_data(data_calib, data_assist, params_prepro):
     ablationsList = params_prepro.get('ablations')
     foldsList     = params_prepro.get('folds')
     forceLoc      = params_prepro.get('forceLoc')
+    savePath      = params_prepro.get('savePathPrepro')
 
-    ## Loop over ablations and folds
-    all_folded_ablated_data = {}
-    for ablation in ablationsList:
-        # Get ablated matrices
-        ablated_calib  = get_ablated_input(data_calib, data_to_remove = ablation, forceLoc = forceLoc)
-        ablated_assist = get_ablated_input(data_assist, data_to_remove = ablation, forceLoc = forceLoc)
-        
-        dict_folds = {}
-        for fold in foldsList:
-            # Get ablated and folded data
-            folded_data = get_folds(ablated_calib, ablated_assist, fold, subj_col = -1)
-            # Update folds dictionnary
-            fold_name = fold + '-fold'
-            dict_folds.update({fold_name: folded_data})
-        
-        # Update final dictionnary
-        all_folded_ablated_data.update({ablation: dict_folds})
+    if os.path.isfile(savePath):
+        with open(savePath, 'rb') as file:
+            data = pickle.load(file)
+        print('Loaded folded and ablated data from pickle.')
+    else:
+        ## Loop over ablations and folds
+        print('Computing folded and ablated datasets...')
+        all_folded_ablated_data = {}
+        for ablation in ablationsList:
+            # Get ablated matrices
+            ablated_calib  = get_ablated_input(data_calib, data_to_remove = ablation, forceLoc = forceLoc)
+            ablated_assist = get_ablated_input(data_assist, data_to_remove = ablation, forceLoc = forceLoc)
+            
+            dict_folds = {}
+            for fold in foldsList:
+                # Get ablated and folded data
+                folded_data = get_folds(ablated_calib, ablated_assist, fold, subj_col = -1)
+                # Update folds dictionnary
+                fold_name = fold + '-fold'
+                dict_folds.update({fold_name: folded_data})
+            
+            # Update final dictionnary
+            all_folded_ablated_data.update({ablation: dict_folds})
+
+        ## Save folded data to pickle
+        with open(savePath, 'wb') as file:
+            pickle.dump(all_folded_ablated_data, file)
+        print('Folded and ablated data computed and saved to pickle')
 
     ## Return complete dictionnary
     return all_folded_ablated_data
@@ -202,7 +216,7 @@ def get_eval_and_train_folds(calib_mat, assist_mat, fSizes_calib, fSizes_assist,
         # Get random evaluation fold for assistance experiment
         eval_fold_assist      = rng.choice(subj_list_unused_assist, size = ev_fold_size_assist, replace = False)
         eval_fold_mask_assist = np.isin(assist_mat[:,subj_col], eval_fold_assist)
-        eval_data_fold_assist = calib_mat[eval_fold_mask_assist]
+        eval_data_fold_assist = assist_mat[eval_fold_mask_assist]
 
         # Get full evaluation fold
         eval_fold_i = np.concatenate((eval_data_fold_calib, eval_data_fold_assist), axis = 0)
