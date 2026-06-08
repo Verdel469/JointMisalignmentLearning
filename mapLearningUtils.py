@@ -25,7 +25,7 @@ def get_all_folded_ablated_data(data_calib, data_assist, params_prepro):
 
     if os.path.isfile(savePath):
         with open(savePath, 'rb') as file:
-            data = pickle.load(file)
+            all_folded_ablated_data = pickle.load(file)
         print('Loaded folded and ablated data from pickle.')
     else:
         ## Loop over ablations and folds
