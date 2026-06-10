@@ -1,5 +1,5 @@
 # Ignore files that are not source code or .dll
-all_params/
+all_params/folded_ablated_data
 **.zip
 **.pdf
 **.svg

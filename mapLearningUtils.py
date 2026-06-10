@@ -1,3 +1,11 @@
+"""
+This file defines functions to prepare the folded and ablated data, and save the fitted models to pickle files.
+
+Author: Dorian Verdel [d.verdel@imperial.ac.uk]
+Last modified: 06/2026
+"""
+
+
 ## Imports
 # General
 import os
@@ -23,10 +31,9 @@ def get_all_folded_ablated_data(data_calib, data_assist, params_prepro):
     forceLoc      = params_prepro.get('forceLoc')
     savePath      = params_prepro.get('savePathPrepro')
 
-    if os.path.isfile(savePath):
-        with open(savePath, 'rb') as file:
-            all_folded_ablated_data = pickle.load(file)
-        print('Loaded folded and ablated data from pickle.')
+    savePathFile = savePath + 'velocity_2-fold.pkl'
+    if os.path.isfile(savePathFile):
+        print('Folded and ablated data already computed.')
     else:
         ## Loop over ablations and folds
         print('Computing folded and ablated datasets...')
@@ -48,12 +55,16 @@ def get_all_folded_ablated_data(data_calib, data_assist, params_prepro):
             all_folded_ablated_data.update({ablation: dict_folds})
 
         ## Save folded data to pickle
-        with open(savePath, 'wb') as file:
-            pickle.dump(all_folded_ablated_data, file)
-        print('Folded and ablated data computed and saved to pickle')
+        for ablation in ablationsList:
+            ablated_data = all_folded_ablated_data.get(ablation)
+            for fold in foldsList:
+                fold_name = fold + '-fold'
+                ablatedFolded_data = ablated_data.get(fold_name)
+                savePathFile = savePath + ablation + '_' + fold_name + '.pkl'
+                with open(savePathFile, 'wb') as file:
+                    pickle.dump(ablatedFolded_data, file)
 
-    ## Return complete dictionnary
-    return all_folded_ablated_data
+        print('All folded and ablated data computed and saved to pickle')
 
 
 def get_ablated_input(input_mat, data_to_remove = False, forceLoc = "wrist"):
@@ -255,8 +266,19 @@ def get_eval_and_train_folds(calib_mat, assist_mat, fSizes_calib, fSizes_assist,
     return folded_data
 
 
+def save_fitted_model(model):
+    """
+    Function saving a fitted model to pickle file.
 
-        
+    Args:
+      - model: dict; Dictionnary containing the output of the model fitting
+    """
+    ## Extract simulation parameters
+    saveDirFile = model.get('saveFittedDir')
+    
+    # Save fitted models
+    with open(saveDirFile, 'wb') as file:
+            pickle.dump(model, file)
 
 
 

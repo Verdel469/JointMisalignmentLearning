@@ -1,12 +1,49 @@
 ## Imports
 # General
+import os
+import pickle
 import numpy as np
 import torch
 import torch.nn as nn
+import time
 from neuralop.models import FNO
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import PolynomialFeatures
+# Local
+import mapLearningUtils as mlu
+
+def run_training(sharedList, listParamsDict, iter):
+    """
+    Function running the training of the model for each given set of parameters.
+
+    Args:
+      - sharedList: Manager.list(); Shared list for parallel solution saving.
+    """
+    ## Get values from dict
+    params_i    = listParamsDict[iter]
+    model       = params_i.get('model')
+    dataPath    = params_i.get('dataPath')
+    ablation    = params_i.get('ablation')
+    foldName    = params_i.get('fold')
+    saveDirFile = params_i.get('saveFittedDir')
+
+    if os.path.isfile(saveDirFile):
+        print('Model already fitted and available at: ' + saveDirFile)
+    else:
+        ## Build params dictionnary for each model
+        with open(dataPath, 'rb') as file:
+            data = pickle.load(file)
+
+        ## Inform current step
+        print('Fitting ' + model + ', with ablation: ' + ablation + ' and ' + foldName)
+
+        ## Get trained models (k models for each type of fitting)
+        fitted_models = train_MappingJM(data, model, params = params_i)
+        params_i.update({'fitted_models': fitted_models})
+        mlu.save_fitted_model(params_i)
+
+    return sharedList.append(params_i)
 
 def train_MappingJM(folded_data, type, params):
     """
@@ -55,11 +92,16 @@ def train_MVLR_Mappings(folded_data, params):
         # Get inputs and outputs
         input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
         output_data = np.array(train_data_fold_i[:,-6:-2], dtype = np.float64)
+        # Time before preprocessing and training
+        timebef = time.time()
         # Fit MVLR model
         modelFold_i = LinearRegression()
         modelFold_i.fit(input_data, output_data)
+        # Get elapsed time during model creation and fitting
+        elapsed = time.time() - timebef
+        time_fold_i = 'fitTime' + fold_i
         # Save model
-        models_MVLR.update({fold_i: modelFold_i})
+        models_MVLR.update({fold_i: modelFold_i, time_fold_i: elapsed})
 
     return models_MVLR
 
@@ -86,13 +128,18 @@ def train_MVPR_Mappings(folded_data, params):
         # Get inputs and outputs
         input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
         output_data = np.array(train_data_fold_i[:,-6:-2], dtype = np.float64)
+        # Time before preprocessing and training
+        timebef = time.time()
         # Preprocess and fit MVPR model
         polyFeatures = PolynomialFeatures(degree = degree)
         input_polyData = polyFeatures.fit_transform(input_data)
         modelFold_i = LinearRegression()
         modelFold_i.fit(input_polyData, output_data)
+        # Get elapsed time during model creation and fitting
+        elapsed = time.time() - timebef
+        time_fold_i = 'fitTime' + fold_i
         # Save model
-        models_MVPR.update({fold_i: modelFold_i})
+        models_MVPR.update({fold_i: modelFold_i, time_fold_i: elapsed})
 
     return models_MVPR
 
@@ -117,6 +164,8 @@ def train_FNO_Mappings(folded_data, params):
         # Get fold i
         fold_i = "fold" + str(i)
         train_data_fold_i = folded_data.get(fold_i).get("train_data")
+        # Time before preprocessing and training
+        timebef = time.time()
         # Get inputs and outputs
         X, Y, d_in, d_out = get_tensorsFromMat(train_data_fold_i)
         # Format data
@@ -131,8 +180,11 @@ def train_FNO_Mappings(folded_data, params):
         loss_fn = nn.MSELoss()
         # Run training loop
         modelFold_i = train_FNO_oneFold(X, Y, modelFold_i, optimizer, loss_fn, params)
+        # Get elapsed time during model creation and fitting
+        elapsed = time.time() - timebef
+        time_fold_i = 'fitTime' + fold_i
         # Save model
-        models_FNO.update({fold_i: modelFold_i})
+        models_FNO.update({fold_i: modelFold_i, time_fold_i: elapsed})
 
     return models_FNO
 
