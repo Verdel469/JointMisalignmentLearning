@@ -1,3 +1,10 @@
+"""
+This file defines functions to train the different types of models: MVLR, MVPR, FNO, LSTM.
+
+Author: Dorian Verdel [d.verdel@imperial.ac.uk]
+Last modified: 06/2026
+"""
+
 ## Imports
 # General
 import os
@@ -8,7 +15,6 @@ import torch.nn as nn
 import time
 from neuralop.models import FNO
 from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import PolynomialFeatures
 # Local
 import mapLearningUtils as mlu
