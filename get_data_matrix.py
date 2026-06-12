@@ -138,7 +138,7 @@ def get_calib_data(params):
             data_one_trial['l_a']   = l_a
             data_one_trial['l_fa']  = l_fa
             data_one_trial['trial'] = j
-            data_one_trial['subj']  = subj
+            data_one_trial['subj']  = subj + '_c'
 
             # Keep only relevant variables
             data_one_trial = data_one_trial[list_variables]
@@ -247,7 +247,7 @@ def get_assist_data(params):
                     data_one_trial['l_a']   = l_a
                     data_one_trial['l_fa']  = l_fa
                     data_one_trial['trial'] = j
-                    data_one_trial['subj']  = subj
+                    data_one_trial['subj']  = subj + '_a'
 
                     # Keep only relevant variables
                     data_one_trial = data_one_trial[list_variables]
