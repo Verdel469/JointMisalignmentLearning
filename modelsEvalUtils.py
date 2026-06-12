@@ -72,7 +72,7 @@ def compute_eval_params(model, eval_data, model_params, nb_joints = 2):
         # Position STD error
         qs_std = compute_STD_error(pred_data_subj[:,0], output_data_subj[:,0])
         qe_std = compute_STD_error(pred_data_subj[:,1], output_data_subj[:,1])
-        # Velocity AAE
+        # Velocity STD error
         dqs_std = compute_STD_error(pred_data_subj[:,2], output_data_subj[:,2])
         dqe_std = compute_STD_error(pred_data_subj[:,3], output_data_subj[:,3])
 
@@ -85,14 +85,25 @@ def compute_eval_params(model, eval_data, model_params, nb_joints = 2):
         # Torque AAE
         ts_aae = compute_AAE(tau_s_pred, tau_s)
         te_aae = compute_AAE(tau_e_pred, tau_e)
+        # Torque MAX error
+        ts_max = compute_MaxAbsError(tau_s_pred, tau_s)
+        te_max = compute_MaxAbsError(tau_e_pred, tau_e)
+        # Torque STD error
+        ts_std = compute_STD_error(tau_s_pred, tau_s)
+        te_std = compute_STD_error(tau_e_pred, tau_e)
 
-        # Store computed errors to dictionnary
-        dict_errors = {'model'  : [model_name]*nb_joints, 'ablation': [ablation]*nb_joints,
-                       'fold'   : [fold_name]*nb_joints , 'fold_id' : [fold_id]*nb_joints ,
-                       'subject': [subject]*nb_joints   , 'joint'   : ['shoulder', 'elbow'],
-                       'posRMSE': [qs_rms, qe_rms]      , 'velRMSE' : [dqs_rms, dqe_rms],
-                       'posAAE' : [qs_aae, qe_aae]      , 'velAAE'  : [dqs_aae, dqe_aae],
-                       'tauRMSE': [ts_rms, te_rms]      , 'tauAAE'  : [ts_aae, te_aae]}
+        # Store computed errors
+        dict_errors = {'model'    : [model_name]*nb_joints, 'ablation' : [ablation]*nb_joints,
+                       'fold'     : [fold_name]*nb_joints , 'fold_id'  : [fold_id]*nb_joints ,
+                       'subject'  : [subject]*nb_joints   , 'joint'    : ['shoulder', 'elbow'],
+                       'posRMSE'  : [qs_rms, qe_rms]      , 'velRMSE'  : [dqs_rms, dqe_rms],
+                       'posAAE'   : [qs_aae, qe_aae]      , 'velAAE'   : [dqs_aae, dqe_aae],
+                       'tauRMSE'  : [ts_rms, te_rms]      , 'tauAAE'   : [ts_aae, te_aae],
+                       'pErrMax'  : [qs_max, qe_max]      , 'vErrMax'  : [dqs_max, dqe_max],
+                       'pErrStd'  : [qs_std, qe_std]      , 'vErrStd'  : [dqs_std, dqe_std],
+                       'tauErrMax': [ts_max, te_max]      , 'tauErrStd': [ts_std, te_std]}
+        
+        list_dictErrors.append(dict_errors)
     
     ## Return list of dicts of errors
     return list_dictErrors
@@ -145,7 +156,7 @@ def compute_STD_error(pred, data):
     return np.std(err)
 
 
-def compute_Torques(pred, data):
+def compute_Torques(pred, data, ablation):
     """
     Compute the RMS error between two column vectors.
 

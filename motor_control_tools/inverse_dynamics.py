@@ -1,3 +1,10 @@
+"""
+This file defines functions to compute joints torques from trajectories.
+
+Author: Dorian Verdel [d.verdel@imperial.ac.uk]
+Last modified: 06/2026
+"""
+
 ## Imports
 # General
 import numpy as np
@@ -11,13 +18,14 @@ def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], duration = 1):
     joints trajectory.
 
     Args:
-      - anthropo : dict              ; contains anthropometric data of a subject
-      - j_pos    : 2xlen(batch) array; shoulder & elbow joints positions
-      - j_vel    : 2xlen(batch) array; shoulder & elbow joints velocities
-      - j_acc    : 2xlen(batch) array; shoulder & elbow joints accelerations
-      - duration : 1x1 float         ; movement duration
+      - anthropo : dict              ; Contains anthropometric data of a subject
+      - j_pos    : 2xlen(batch) array; Shoulder & elbow joints positions
+      - j_vel    : 2xlen(batch) array; Shoulder & elbow joints velocities
+      - j_acc    : 2xlen(batch) array; Shoulder & elbow joints accelerations
+      - duration : 1x1 float         ; Movement duration
     Outputs:
-      - torques  : 2xlen(batch) array; estimated shoulder & elbow joints torques
+      - tau_s : 1xlen(batch) array; Estimated shoulder joint torques
+      - tau_e : 1xlen(batch) array; Estimated elbow joint torques
     """
     ## Get velocity and acceleration if not provided
     if not j_vel:
@@ -29,14 +37,14 @@ def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], duration = 1):
 
     ## Get anthropometrics
     # Upper-arm
-    l_a  = anthropo.get("l_arm")
-    lg_a = anthropo.get("lg_arm")
-    m_a  = anthropo.get("m_arm")
-    i_a  = anthropo.get("inertia_arm")
+    l_a  = anthropo.get('lengths').get('arm')
+    lg_a = anthropo.get('coms').get('arm')
+    m_a  = anthropo.get('masses').get('arm')
+    i_a  = anthropo.get('inertias').get('arm')
     # Forearm + hand
-    lg_fa = anthropo.get("lg_forearm")
-    m_fa  = anthropo.get("m_forearm")
-    i_fa  = anthropo.get("inertia_forearm")
+    lg_fa = anthropo.get('coms').get('forearmHand')
+    m_fa  = anthropo.get('masses').get('forearmHand')
+    i_fa  = anthropo.get('inertias').get('forearmHand')
 
     ## Common dynamics
     g = 9.81 # [m/s²]
@@ -61,5 +69,4 @@ def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], duration = 1):
     tau_e = inertia_e + coriolis_e + gravity_e + friction_e
 
     # Return estimated torques
-    torques = np.concatenate([tau_s, tau_e], axis = 0)
-    return torques
+    return tau_s, tau_e

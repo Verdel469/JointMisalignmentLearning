@@ -291,3 +291,55 @@ def get_assist_data(params):
 
     # Return complete array
     return df_all_data.to_numpy()
+
+def get_all_anthropo_data(params):
+    """
+    Function building and saving a nested dictionnary of all anthropometrics data.
+
+    Args:
+      - params : dict; Dictionnary of input parameters
+    """
+    ## Initialize
+    dict_all = {}
+    pathexpe = params.get('pathExpe')
+    savepath = params.get('savePath')
+    listSubj = params.get('listSubj')
+
+    ## Loop over subjects
+    for subject in listSubj:
+        # Get anthropo file
+        anthropo_path = pathexpe + subject + '/' + subject + '.json'
+        with open(anthropo_path, 'r', encoding='utf-8') as file:
+            subj_info = json.load(file)
+
+        # Get lengths
+        lengths = subj_info.get('measures')
+
+        # Get masses
+        masses = subj_info.get('masses')
+        if not 'forearmHand' in masses:
+            m_fah = masses.get('forearm') + masses.get('hand')
+            masses.update({'forearmHand': m_fah})
+
+        # Get COMs positions
+        if 'coms' in subj_info:
+            coms = subj_info.get('coms')
+        else:
+            lg_a   = 0.436 * lengths.get('arm')
+            lg_fah = ((0.43 * lengths.get('forearm') * masses.get('forearm')
+                      + (lengths.get('forearm') + 0.506 * lengths.get('hand')) * masses.get('hand'))
+                      / masses.get('forearmHand'))
+            coms = {'arm': lg_a, 'forearmHand': lg_fah}
+
+        # Get inertias
+        i_a  = masses.get('arm') * coms.get('arm')**2
+        i_fa = masses.get('forearmHand') * coms.get('forearmHand')**2
+        inertias = {'arm': i_a, 'forearmHand': i_fa}
+
+        # Store in dict
+        dict_all.update({'subject': {'lengths': lengths, 'masses': masses, 'coms': coms, 'inertias': inertias}})
+
+    ## Save anthropometrics file
+    with open(savepath, 'wb') as file:
+        pickle.dump(dict_all, file)
+        
