@@ -12,28 +12,28 @@ import numpy as np
 # Local
 import motor_control_tools.signal as mct_sig
 
-def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], duration = 1):
+def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], sRate = 100):
     """
     Compute human torques (2-dof arm) using inverse dynamics for a given
     joints trajectory.
 
     Args:
-      - anthropo : dict              ; Contains anthropometric data of a subject
-      - j_pos    : 2xlen(batch) array; Shoulder & elbow joints positions
-      - j_vel    : 2xlen(batch) array; Shoulder & elbow joints velocities
-      - j_acc    : 2xlen(batch) array; Shoulder & elbow joints accelerations
-      - duration : 1x1 float         ; Movement duration
+      - anthropo : dict           ; Contains anthropometric data of a subject
+      - j_pos : 2xlen(batch) array; Shoulder & elbow joints positions
+      - j_vel : 2xlen(batch) array; Shoulder & elbow joints velocities
+      - j_acc : 2xlen(batch) array; Shoulder & elbow joints accelerations
+      - sRate : 1x1 float         ; Sample rate [Hz]
     Outputs:
       - tau_s : 1xlen(batch) array; Estimated shoulder joint torques
       - tau_e : 1xlen(batch) array; Estimated elbow joint torques
     """
     ## Get velocity and acceleration if not provided
     if not j_vel:
-        j_pos_filt = mct_sig.filter(j_pos, len(j_pos)/duration, low_pass = 5, order = 5)
-        j_vel = mct_sig.diff_keep_length_duration(j_pos_filt, duration)
+        j_pos_filt = mct_sig.filter(j_pos, sRate, low_pass = 5, order = 5)
+        j_vel = mct_sig.diff_keep_length(j_pos_filt, sRate)
     if not j_acc:
-        j_vel_filt = mct_sig.filter(j_vel, len(j_pos)/duration, low_pass = 5, order = 5)
-        j_acc = mct_sig.diff_keep_length_duration(j_vel_filt, duration)
+        j_vel_filt = mct_sig.filter(j_vel, sRate, low_pass = 5, order = 5)
+        j_acc = mct_sig.diff_keep_length(j_vel_filt, sRate)
 
     ## Get anthropometrics
     # Upper-arm

@@ -13,15 +13,31 @@ import pickle
 from neuralop.models import FNO
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
+# Local
+import inverse_dynamics as invDyn
 
-def compute_eval_params(model, eval_data, model_params, nb_joints = 2):
+def get_all_eval_params_dict(all_params):
+    """
+    Function to compute evaluation metrics for all data folds and all model types.
+
+    Args:
+      - all_params : dict; Dictionnary containing all relevant data for the evaluation
+    """
+    ## Initialize
+    dict_all_params = {}
+
+    return dict_all_params
+
+
+def compute_eval_params(model, eval_data, model_params, all_anthropo, nb_joints = 2):
     """
     Function computing RMS and absolute mean errors for a given model for each joint.
 
     Args:
       - model        : fittedModel; Coefficients of the fitted model
       - eval_data    : NxM array  ; Array containing one ablated fold of evaluation data
-      - model_params : dict       ; Dictionnary containg all relevant information
+      - model_params : dict       ; Dictionnary containg all relevant information regarding the fitted models
+      - all_anthropo : dict       ; Dictionnary containg all the participants' anthropometric information
     """
     ## Initialize
     list_dictErrors = []
@@ -42,10 +58,11 @@ def compute_eval_params(model, eval_data, model_params, nb_joints = 2):
 
     ## Loop over subjects
     for subject in subjList:
-        # Get subject data
-        eval_data_subj   = eval_data[eval_data[:,-1] == subject]
-        input_data_subj  = eval_data_subj[:,:-6]
-        output_data_subj = eval_data_subj[:,-6:-2]
+        # Get subject recorded data
+        eval_data_subj     = eval_data[eval_data[:,-1] == subject]
+        input_data_subj    = eval_data_subj[:,:-6]
+        output_data_subj   = eval_data_subj[:,-6:-2]
+        anthropo_data_subj = all_anthropo.get('subject')
 
         if model_name == "MVPR":
             input_data_subj = polyFeatures.fit_transform(input_data_subj)
@@ -77,7 +94,7 @@ def compute_eval_params(model, eval_data, model_params, nb_joints = 2):
         dqe_std = compute_STD_error(pred_data_subj[:,3], output_data_subj[:,3])
 
         # Compute torques
-        tau_s_pred, tau_e_pred, tau_s, tau_e = compute_Torques(input_data_subj, output_data_subj)
+        tau_s_pred, tau_e_pred, tau_s, tau_e = compute_Torques(pred_data_subj, output_data_subj, anthropo_data_subj)
 
         # Torque RMS
         ts_rms = compute_RMSerror(tau_s_pred, tau_s)
@@ -107,6 +124,7 @@ def compute_eval_params(model, eval_data, model_params, nb_joints = 2):
     
     ## Return list of dicts of errors
     return list_dictErrors
+
 
 def compute_RMSerror(pred, data):
     """
@@ -156,12 +174,29 @@ def compute_STD_error(pred, data):
     return np.std(err)
 
 
-def compute_Torques(pred, data, ablation):
+def compute_Torques(pred, data, anthropo_subj):
     """
-    Compute the RMS error between two column vectors.
+    Compute torques corresponding to predicted and recorded human joints trajectories.
 
     Args:
-      - pred : nSamplesx1; Column vector of model predictions
-      - data : nSamplesx1; Column vector of recorded data
+      - pred          : nSamplesx4; Column vector of model predictions
+      - data          : nSamplesx4; Column vector of recorded data
+      - anthropo_subj : dict      ; Dictionnary of anthropometric parameters for the considered subject
+    Output:
+      - tau_s_pred : nSamplesx1; Vector of predicted shoulder torques
+      - tau_e_pred : nSamplesx1; Vector of predicted elbow torques
+      - tau_s      : nSamplesx1; Vector of estimated shoulder torques
+      - tau_e      : nSamplesx1; Vector of estimated elbow torques
     """
-    # TODO
+    ## Initialize
+    j_pos_est  = data[:,:2]
+    j_vel_est  = data[:,2:]
+    j_pos_pred = pred[:,:2]
+    j_vel_pred = pred[:,2:]
+
+    ## Get torques
+    tau_s, tau_e           = invDyn.inverse_dynamics(anthropo_subj, j_pos_est, j_vel = j_vel_est, sRate = 100)
+    tau_s_pred, tau_e_pred = invDyn.inverse_dynamics(anthropo_subj, j_pos_pred, j_vel = j_vel_pred, sRate = 100)
+
+    ## Return torques
+    return tau_s_pred, tau_e_pred, tau_s, tau_e

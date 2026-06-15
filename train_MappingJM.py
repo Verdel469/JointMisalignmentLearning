@@ -85,6 +85,8 @@ def train_MVLR_Mappings(folded_data, params):
     Args:
       - folded_data : dict   ; Nested dictionnary with the different folds
       - params      : dict   ; Model and training parameters
+    Output:
+      - models : dict ; Dictionnary of trained robot-to-human linear mappings for the different folds
     """
     ## Initialize
     models_MVLR = {}
@@ -120,6 +122,8 @@ def train_MVPR_Mappings(folded_data, params):
     Args:
       - folded_data : dict   ; Nested dictionnary with the different folds
       - params      : dict   ; Model and training parameters
+    Output:
+      - models : dict ; Dictionnary of trained robot-to-human polynomial mappings for the different folds
     """
     ## Initialize
     models_MVPR = {}
@@ -158,6 +162,8 @@ def train_FNO_Mappings(folded_data, params):
     Args:
       - folded_data : dict   ; Nested dictionnary with the different folds
       - params      : dict   ; Model and training parameters
+    Output:
+      - models : dict ; Dictionnary of trained robot-to-human FNO mappings for the different folds
     """
     ## Initialize
     models_FNO = {}
@@ -273,6 +279,8 @@ def train_LSTM_Mappings(folded_data, params):
     Args:
       - folded_data : dict   ; Nested dictionnary with the different folds
       - params      : dict   ; Model and training parameters
+    Output:
+      - models : dict ; Dictionnary of trained robot-to-human LSTM mappings for the different folds
     """
 
     models_LSTM = {}
