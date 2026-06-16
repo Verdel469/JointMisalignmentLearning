@@ -278,7 +278,7 @@ def save_fitted_model(model):
     
     # Save fitted models
     with open(saveDirFile, 'wb') as file:
-            pickle.dump(model, file)
+        pickle.dump(model, file)
 
 
 

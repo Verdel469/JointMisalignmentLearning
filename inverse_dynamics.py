@@ -12,7 +12,7 @@ import numpy as np
 # Local
 import motor_control_tools.signal as mct_sig
 
-def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], sRate = 100):
+def inverse_dynamics(anthropo,j_pos, j_vel = np.array([]), j_acc = np.array([]), sRate = 100):
     """
     Compute human torques (2-dof arm) using inverse dynamics for a given
     joints trajectory.
@@ -28,10 +28,10 @@ def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], sRate = 100):
       - tau_e : 1xlen(batch) array; Estimated elbow joint torques
     """
     ## Get velocity and acceleration if not provided
-    if not j_vel:
+    if j_vel.size == 0:
         j_pos_filt = mct_sig.filter(j_pos, sRate, low_pass = 5, order = 5)
         j_vel = mct_sig.diff_keep_length(j_pos_filt, sRate)
-    if not j_acc:
+    if j_acc.size == 0:
         j_vel_filt = mct_sig.filter(j_vel, sRate, low_pass = 5, order = 5)
         j_acc = mct_sig.diff_keep_length(j_vel_filt, sRate)
 
@@ -51,19 +51,27 @@ def inverse_dynamics(anthropo,j_pos, j_vel = [], j_acc = [], sRate = 100):
     mu_s = 0.05 # [Nm.s/rad] TO CHECK FROM VENTURE
     mu_e = 0.05 # [Nm.s/rad] IDEM
 
+    ## Get joints kinematics
+    qs   = j_pos[:,0]
+    qe   = j_pos[:,1]
+    dqs  = j_vel[:,0]
+    dqe  = j_vel[:,1]
+    ddqs = j_acc[:,0]
+    ddqe = j_acc[:,1]
+
     ## Compute the different torque components
     # Inertia
-    inertia_s = (i_a + i_fa + m_fa*(l_a**2 + 2*l_a*lg_fa*np.cos(j_pos[1,:])))*j_acc[0,:] + (i_fa + m_fa*l_a*lg_fa*np.cos(j_pos[1,:]))*j_acc[1,:]
-    inertia_e = (i_fa + m_fa*l_a*lg_fa*np.cos(j_pos[1,:]))*j_acc[0,:] + i_fa*j_acc[1,:]
+    inertia_s = (i_a + i_fa + m_fa*(l_a**2 + 2*l_a*lg_fa*np.cos(qe)))*ddqs + (i_fa + m_fa*l_a*lg_fa*np.cos(qe))*ddqe
+    inertia_e = (i_fa + m_fa*l_a*lg_fa*np.cos(qe))*ddqs + i_fa*ddqe
     # Coriolis
-    coriolis_s = -m_fa * l_a * lg_fa * np.sin(j_pos[1,:]) * (j_vel[1,:]**2 + 2*j_vel[0,:]*j_vel[1,:])
-    coriolis_e = m_fa * l_a * lg_fa * np.sin(j_pos[1,:]) * j_vel[0,:] * (2*j_vel[0,:] + j_vel[1,:])
+    coriolis_s = -m_fa * l_a * lg_fa * np.sin(qe) * (dqe**2 + 2*dqs*dqe)
+    coriolis_e = m_fa * l_a * lg_fa * np.sin(qe) * dqs * (2*dqs + dqe)
     # Gravity
-    gravity_s = g * m_a * lg_a * np.cos(j_pos[0,:]) + g * m_fa * (l_a*np.cos(j_pos[0,:]) + lg_fa*np.cos(j_pos[0,:] + j_pos[1,:]))
-    gravity_e = g * m_fa * lg_fa * np.cos(j_pos[0,:] + j_pos[1,:])
+    gravity_s = g * m_a * lg_a * np.cos(qs) + g * m_fa * (l_a*np.cos(qs) + lg_fa*np.cos(qs + qe))
+    gravity_e = g * m_fa * lg_fa * np.cos(qs + qe)
     # Friction
-    friction_s = mu_s*j_vel[0,:]
-    friction_e = mu_e*j_vel[1,:]
+    friction_s = mu_s*dqs
+    friction_e = mu_e*dqe
     # Total torques
     tau_s = inertia_s + coriolis_s + gravity_s + friction_s
     tau_e = inertia_e + coriolis_e + gravity_e + friction_e

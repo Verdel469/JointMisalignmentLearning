@@ -96,13 +96,10 @@ def resample_non_uniform(x, y, new_sample_rate):
 def diff_keep_length(signal, sample_rate, spec_t = False):
     """Derive en conservant la longueur du signal. La dérnière valeur est doublée"""
 
-    if spec_t:
-        diff           = np.diff(signal)
-        diff_len       = np.append(diff,diff[-1])
-        signal_dot_len = diff_len/sample_rate
-    else:
-        signal_dot     = np.diff(signal)*sample_rate
-        signal_dot_len = np.append(signal_dot,signal_dot[-1])
+    diff           = np.diff(signal, axis = 0)
+    diff_len       = np.concatenate([diff, [diff[-1,:]]], axis = 0)
+    signal_dot_len = diff_len * sample_rate
+
     return signal_dot_len
 
 def diff_keep_length_duration(signal, duration):

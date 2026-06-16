@@ -337,7 +337,11 @@ def get_all_anthropo_data(params):
         inertias = {'arm': i_a, 'forearmHand': i_fa}
 
         # Store in dict
-        dict_all.update({'subject': {'lengths': lengths, 'masses': masses, 'coms': coms, 'inertias': inertias}})
+        if params.get('type') == 'CALIB':
+            subject_name = subject + '_c'
+        else:
+            subject_name = subject + '_a'
+        dict_all.update({subject_name: {'lengths': lengths, 'masses': masses, 'coms': coms, 'inertias': inertias}})
 
     ## Save anthropometrics file
     with open(savepath, 'wb') as file:

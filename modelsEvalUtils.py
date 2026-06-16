@@ -13,34 +13,80 @@ import pickle
 from neuralop.models import FNO
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
+import pandas as pd
 # Local
 import inverse_dynamics as invDyn
 
-def get_all_eval_params_dict(all_params):
+def get_all_eval_params_dict(all_params, all_anthropo, saveDF_path = './all_params/'):
     """
     Function to compute evaluation metrics for all data folds and all model types.
 
     Args:
-      - all_params : dict; Dictionnary containing all relevant data for the evaluation
+      - all_params   : list of dict; List of dictionnary containing all relevant data for the evaluation
+      - all_anthropo : dict        ; Dictionnary with anthropometrics for each subject
+      - saveDF_path  : string      ; Folder to save the full dataframe of metrics
     """
     ## Initialize
-    dict_all_params = {}
+    all_metrics = []
 
-    return dict_all_params
+    ## Loop over models
+    for dict_model in all_params:
+        # Get fitted models
+        pathModel = dict_model.get('saveFittedDir')
+        print('Working on model file: ' + pathModel)
+        with open(pathModel, 'rb') as file:
+            models = pickle.load(file)
+        models_all_folds = models.get('fitted_models')
+
+        # Get folded ablated data
+        pathData = dict_model.get('dataPath')
+        with open(pathData, 'rb') as file:
+            all_data = pickle.load(file)
+
+        # Loop over folds
+        nb_folds = dict_model.get('nb_folds')
+        for i in range(1, nb_folds + 1):
+            # Get model and fit time
+            fold_i  = 'fold' + str(i)
+            time_fold_i = 'fitTime' + fold_i
+            model_i = models_all_folds.get(fold_i)
+            time_i  = models_all_folds.get(time_fold_i)
+            dict_model.update({'fold_id': fold_i})
+
+            # Get training and evaluation data
+            train_data = all_data.get(fold_i).get('train_data')
+            eval_data  = all_data.get(fold_i).get('eval_data')
+
+            train_metrics = compute_eval_params(model_i, time_i, train_data, dict_model, all_anthropo, nb_joints = 2, type = 'train')
+            eval_metrics  = compute_eval_params(model_i, time_i, eval_data, dict_model, all_anthropo, nb_joints = 2, type = 'eval')
+
+            all_metrics.append(train_metrics)
+            all_metrics.append(eval_metrics)
+
+    ## Get and save DataFrame of metrics
+    all_metrics_df = pd.concat(all_metrics, axis = 0)
+    pathSave = saveDF_path + 'all_eval_metrics_JMLearning.csv'
+    all_metrics_df.to_csv(pathSave, index = False)
+
+    return all_metrics_df
 
 
-def compute_eval_params(model, eval_data, model_params, all_anthropo, nb_joints = 2):
+def compute_eval_params(model, fitTime, eval_data, model_params, all_anthropo, nb_joints = 2, type = 'eval'):
     """
     Function computing RMS and absolute mean errors for a given model for each joint.
 
     Args:
       - model        : fittedModel; Coefficients of the fitted model
+      - fitTime      : float      ; Elapsed time during model fitting [s]
       - eval_data    : NxM array  ; Array containing one ablated fold of evaluation data
       - model_params : dict       ; Dictionnary containg all relevant information regarding the fitted models
       - all_anthropo : dict       ; Dictionnary containg all the participants' anthropometric information
+      - type         : string     ; Whether to evaluate performance on training or evaluation data
+    Output:
+      - list_dfErrors : list of DataFrames; Contains a list of computed errors stored in dataframes
     """
     ## Initialize
-    list_dictErrors = []
+    list_dfErrors = []
     model_name      = model_params.get('model')
     ablation        = model_params.get('ablation')
     fold_name       = model_params.get('fold')
@@ -54,15 +100,15 @@ def compute_eval_params(model, eval_data, model_params, all_anthropo, nb_joints 
         degree = 0
 
     ## Extract information from input data matrix
-    subjList    = np.unique(eval_data[:,-1])
+    subjList = np.unique(eval_data[:,-1])
 
     ## Loop over subjects
     for subject in subjList:
         # Get subject recorded data
         eval_data_subj     = eval_data[eval_data[:,-1] == subject]
-        input_data_subj    = eval_data_subj[:,:-6]
-        output_data_subj   = eval_data_subj[:,-6:-2]
-        anthropo_data_subj = all_anthropo.get('subject')
+        input_data_subj    = eval_data_subj[:,:-6].astype(float)
+        output_data_subj   = eval_data_subj[:,-6:-2].astype(float)
+        anthropo_data_subj = all_anthropo.get(subject)
 
         if model_name == "MVPR":
             input_data_subj = polyFeatures.fit_transform(input_data_subj)
@@ -111,19 +157,24 @@ def compute_eval_params(model, eval_data, model_params, all_anthropo, nb_joints 
 
         # Store computed errors
         dict_errors = {'model'    : [model_name]*nb_joints, 'ablation' : [ablation]*nb_joints,
-                       'fold'     : [fold_name]*nb_joints , 'fold_id'  : [fold_id]*nb_joints ,
-                       'subject'  : [subject]*nb_joints   , 'joint'    : ['shoulder', 'elbow'],
+                       'fold'     : [fold_name]*nb_joints , 'fold_id'  : [fold_id]*nb_joints,
+                       'type'     : [type]*nb_joints      , 'subject'  : [subject]*nb_joints,
+                       'joint'    : ['shoulder', 'elbow'] , 'fitTime'  : [fitTime]*nb_joints,
                        'posRMSE'  : [qs_rms, qe_rms]      , 'velRMSE'  : [dqs_rms, dqe_rms],
                        'posAAE'   : [qs_aae, qe_aae]      , 'velAAE'   : [dqs_aae, dqe_aae],
                        'tauRMSE'  : [ts_rms, te_rms]      , 'tauAAE'   : [ts_aae, te_aae],
                        'pErrMax'  : [qs_max, qe_max]      , 'vErrMax'  : [dqs_max, dqe_max],
                        'pErrStd'  : [qs_std, qe_std]      , 'vErrStd'  : [dqs_std, dqe_std],
-                       'tauErrMax': [ts_max, te_max]      , 'tauErrStd': [ts_std, te_std]}
+                       'tauErrMax': [ts_max, te_max]      , 'tauErrStd': [ts_std, te_std],
+                       }
         
-        list_dictErrors.append(dict_errors)
+        df_errors = pd.DataFrame(dict_errors)
+        
+        list_dfErrors.append(df_errors)
     
     ## Return list of dicts of errors
-    return list_dictErrors
+    all_subjs_dfErrors = pd.concat(list_dfErrors, axis = 0)
+    return all_subjs_dfErrors
 
 
 def compute_RMSerror(pred, data):
