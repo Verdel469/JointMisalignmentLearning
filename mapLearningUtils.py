@@ -77,7 +77,7 @@ def get_ablated_input(input_mat, data_to_remove = False, forceLoc = "wrist"):
     Output:
       - ablated : 2D array; Ablated matrix
     """
-    if not data_to_remove:
+    if data_to_remove == "None":
         print("No ablation requested. Initial matrix is returned.")
         return input_mat
     elif data_to_remove == "velocity":
