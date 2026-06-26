@@ -89,6 +89,7 @@ def compute_eval_params(model, fitTime, eval_data, model_params, all_anthropo, n
     list_dfErrors = []
     model_name      = model_params.get('model')
     ablation        = model_params.get('ablation')
+    out_type        = model_params.get('out_type')
     fold_name       = model_params.get('fold')
     fold_id         = model_params.get('fold_id')
 
@@ -97,7 +98,21 @@ def compute_eval_params(model, fitTime, eval_data, model_params, all_anthropo, n
         degree       = model_params.get('degree')
         polyFeatures = PolynomialFeatures(degree = degree)
     else:
-        degree = 0
+        degree = None
+
+    ## Get FNO parameters
+    if model_name == "FNO":
+        batchSize = model_params.get('batchSize')
+        nbModes   = model_params.get('nbModes')
+        nbHC      = model_params.get('nbHC')
+        maxIt     = model_params.get('maxIt')
+        # minLoss   = model_params.get('minLoss')
+    else:
+        batchSize = None
+        nbModes   = None
+        nbHC      = None
+        maxIt     = None
+        # minLoss   = None
 
     ## Extract information from input data matrix
     subjList = np.unique(eval_data[:,-1])
@@ -157,10 +172,12 @@ def compute_eval_params(model, fitTime, eval_data, model_params, all_anthropo, n
 
         # Store computed errors
         dict_errors = {'model'    : [model_name]*nb_joints, 'ablation' : [ablation]*nb_joints,
-                       'fold'     : [fold_name]*nb_joints , 'fold_id'  : [fold_id]*nb_joints,
-                       'type'     : [type]*nb_joints      , 'subject'  : [subject]*nb_joints,
-                       'joint'    : ['shoulder', 'elbow'] , 'degree'   : [degree]*nb_joints,
-                       'fitTime'  : [fitTime]*nb_joints   ,
+                       'predicted': [out_type]*nb_joints  , 'fold'     : [fold_name]*nb_joints,
+                       'fold_id'  : [fold_id]*nb_joints   , 'type'     : [type]*nb_joints,
+                       'subject'  : [subject]*nb_joints   , 'joint'    : ['shoulder', 'elbow'],
+                       'polDegree': [degree]*nb_joints    , 'FNO_batch': [batchSize]*nb_joints,
+                       'FNO_nbMod': [nbModes]*nb_joints   , 'FNO_nbHC' : [nbHC]*nb_joints,
+                       'FNO_maxIt': [maxIt]*nb_joints     , 'fitTime'  : [fitTime]*nb_joints,
                        'posRMSE'  : [qs_rms, qe_rms]      , 'velRMSE'  : [dqs_rms, dqe_rms],
                        'posAAE'   : [qs_aae, qe_aae]      , 'velAAE'   : [dqs_aae, dqe_aae],
                        'tauRMSE'  : [ts_rms, te_rms]      , 'tauAAE'   : [ts_aae, te_aae],

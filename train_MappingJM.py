@@ -31,6 +31,7 @@ def run_training(sharedList, listParamsDict, iter):
     model       = params_i.get('model')
     dataPath    = params_i.get('dataPath')
     ablation    = params_i.get('ablation')
+    out_type    = params_i.get('out_type')
     foldName    = params_i.get('fold')
     saveDirFile = params_i.get('saveFittedDir')
 
@@ -42,7 +43,7 @@ def run_training(sharedList, listParamsDict, iter):
             data = pickle.load(file)
 
         ## Inform current step
-        print('Fitting ' + model + ', with ablation: ' + ablation + ' and ' + foldName)
+        print('Fitting ' + model + ', with ablation of ' + ablation + ' and predicting ' + out_type + ' with ' + foldName)
 
         ## Get trained models (k models for each type of fitting)
         fitted_models = train_MappingJM(data, model, params = params_i)
@@ -90,7 +91,8 @@ def train_MVLR_Mappings(folded_data, params):
     """
     ## Initialize
     models_MVLR = {}
-    nb_folds = params.get('nb_folds')
+    out_type    = params.get('out_type')
+    nb_folds    = params.get('nb_folds')
 
     ## Loop over folds
     for i in range(1, nb_folds + 1):
@@ -98,8 +100,12 @@ def train_MVLR_Mappings(folded_data, params):
         fold_i = "fold" + str(i)
         train_data_fold_i = folded_data.get(fold_i).get("train_data")
         # Get inputs and outputs
-        input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
-        output_data = np.array(train_data_fold_i[:,-6:-2], dtype = np.float64)
+        if out_type == 'posvel':
+            input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
+            output_data = np.array(train_data_fold_i[:,-6:-2], dtype = np.float64)
+        else:
+            input_data  = np.array(train_data_fold_i[:,:-4], dtype = np.float64)
+            output_data = np.array(train_data_fold_i[:,-4:-2], dtype = np.float64)
         # Time before preprocessing and training
         timebef = time.time()
         # Fit MVLR model
@@ -127,6 +133,7 @@ def train_MVPR_Mappings(folded_data, params):
     """
     ## Initialize
     models_MVPR = {}
+    out_type    = params.get('out_type')
     nb_folds    = params.get('nb_folds')
     degree      = params.get('degree')
 
@@ -136,8 +143,12 @@ def train_MVPR_Mappings(folded_data, params):
         fold_i = "fold" + str(i)
         train_data_fold_i = folded_data.get(fold_i).get("train_data")
         # Get inputs and outputs
-        input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
-        output_data = np.array(train_data_fold_i[:,-6:-2], dtype = np.float64)
+        if out_type == 'posvel':
+            input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
+            output_data = np.array(train_data_fold_i[:,-6:-2], dtype = np.float64)
+        else:
+            input_data  = np.array(train_data_fold_i[:,:-4], dtype = np.float64)
+            output_data = np.array(train_data_fold_i[:,-4:-2], dtype = np.float64)
         # Time before preprocessing and training
         timebef = time.time()
         # Preprocess and fit MVPR model
@@ -160,16 +171,16 @@ def train_FNO_Mappings(folded_data, params):
     Train Fourier neural operators to estimate human joints states from robot data.
 
     Args:
-      - folded_data : dict   ; Nested dictionnary with the different folds
-      - params      : dict   ; Model and training parameters
+      - folded_data : dict; Nested dictionnary with the different folds
+      - params      : dict; Model and training parameters
     Output:
-      - models : dict ; Dictionnary of trained robot-to-human FNO mappings for the different folds
+      - models : dict; Dictionnary of trained robot-to-human FNO mappings for the different folds
     """
     ## Initialize
     models_FNO = {}
     nb_folds   = params.get('nb_folds')
-    nb_modes   = params.get('nb_modes')
-    nb_hChan   = params.get('nb_hiddenChannels')
+    nb_modes   = params.get('nbModes')
+    nb_hChan   = params.get('nbHC')
 
     ## Loop over folds
     for i in range(1, nb_folds + 1):
@@ -179,7 +190,7 @@ def train_FNO_Mappings(folded_data, params):
         # Time before preprocessing and training
         timebef = time.time()
         # Get inputs and outputs
-        X, Y, d_in, d_out = get_tensorsFromMat(train_data_fold_i)
+        X, Y, d_in, d_out = get_tensorsFromMat(train_data_fold_i, params)
         # Format data
         # Create model
         modelFold_i = FNO(
@@ -191,47 +202,68 @@ def train_FNO_Mappings(folded_data, params):
         optimizer = torch.optim.Adam(modelFold_i.parameters(), lr=1e-3)
         loss_fn = nn.MSELoss()
         # Run training loop
-        modelFold_i = train_FNO_oneFold(X, Y, modelFold_i, optimizer, loss_fn, params)
+        nbIt_i = 'nbItConv' + fold_i
+        loss_i = 'losses' + fold_i
+        modelFold_i, losses_i, nb_it_i = train_FNO_oneFold(X, Y, modelFold_i, optimizer, loss_fn, params)
         # Get elapsed time during model creation and fitting
         elapsed = time.time() - timebef
         time_fold_i = 'fitTime' + fold_i
         # Save model
-        models_FNO.update({fold_i: modelFold_i, time_fold_i: elapsed})
+        models_FNO.update({fold_i: modelFold_i, loss_i: losses_i, time_fold_i: elapsed, nbIt_i: nb_it_i})
 
     return models_FNO
 
-def get_tensorsFromMat(train_data_fold_i):
+def get_tensorsFromMat(train_data_fold_i, params):
     """
     Transforms input 2D numpy arrays containing all training trials to torch tensors
 
     Args:
-      - train_data_fold_i : dict ; Dictionnary of fold i
+      - train_data_fold_i : dict; Dictionnary of fold i
+      - params            : dict; Model and training parameters
     Output:
-      - X : torch tensor ; Input torch tensor
-      - Y : torch tensor ; Output torch tensor
+      - X     : torch tensor; Input torch tensor
+      - Y     : torch tensor; Output torch tensor
+      - d_in  : int         ; Number of input features
+      - d_out : int         ; Number of output features
     """
     ## Initialize
-    input_data = []
-    output_data = []
+    out_type  = params.get('out_type')
+    batchSize = params.get('batchSize')
 
-    ## Get 3-dimensional np arrays
-    for subject in train_data_fold_i[:,-1].unique():
-        subj_data_fold_i = train_data_fold_i[train_data_fold_i[:,-1] == subject]
-        for mvt in subj_data_fold_i[:,-2].unique():
-            subj_mvt_data_fold_i = subj_data_fold_i[subj_data_fold_i[:,-2] == mvt]
-            # Store movement data
-            input_data.append(np.array(subj_mvt_data_fold_i[:,:-6], dtype = np.float64))
-            output_data.append(np.array(subj_mvt_data_fold_i[:,-6:-2], dtype = np.float64))
+    ## Get shuffled input and output data to have homogeneous batches
+    shuffled_data   = np.random.permutation(train_data_fold_i)
+    if out_type == 'posvel':
+        input_data      = shuffled_data[:,:-6]
+        input_data_num  = input_data.astype(np.float64)
+        output_data     = shuffled_data[:,-6:-2]
+        output_data_num = output_data.astype(np.float64)
+    else:
+        input_data      = shuffled_data[:,:-4]
+        input_data_num  = input_data.astype(np.float64)
+        output_data     = shuffled_data[:,-4:-2]
+        output_data_num = output_data.astype(np.float64)
+
+    ## Discard samples to match batch size
+    nbBatch   = input_data_num.shape[0] // batchSize
+    nbSamples = nbBatch * batchSize
+    input_data_cut  = input_data_num[:nbSamples,:]
+    output_data_cut = output_data_num[:nbSamples,:]
 
     ## Get input and output dimmension
-    d_in  = input_data.shape[-1]
-    d_out = output_data.shape[-1]
+    d_in  = input_data_cut.shape[1]
+    d_out = output_data_cut.shape[1]
+
+    ## Reshape to 3d arrays
+    split_input  = np.array_split(input_data_cut, nbBatch, axis = 0)
+    input_3d     = np.stack(split_input)
+    split_output = np.array_split(output_data_cut, nbBatch, axis = 0)
+    output_3d    = np.stack(split_output)
 
     ## Transform input and output matrices to torch tensors
-    X_np = torch.from_numpy(input_data).float()   # (mvt, samples_per_mvt, d_in)
-    Y_np = torch.from_numpy(output_data).float()  # (mvt, samples_per_mvt, d_out)
+    X_np = torch.from_numpy(input_3d).float()   # (batch, batchSize, d_in)
+    Y_np = torch.from_numpy(output_3d).float()  # (batch, batchSize, d_out)
 
-    ## Permute for FNO with [batch = mvt, seq_len = samples_per_mvt]
+    ## Permute for FNO with [seq_len = batchSize]
     X = X_np.permute(0, 2, 1)  # (batch, d_in, seq_len)
     Y = Y_np.permute(0, 2, 1)  # (batch, d_out, seq_len)
 
@@ -242,33 +274,39 @@ def train_FNO_oneFold(X, Y, modelFold_i, optimizer, loss_fn, params):
     Run training loop of FNO model.
 
     Args:
-      - X           : torch tensor ; Input torch tensor
-      - Y           : torch tensor ; Output torch tensor
-      - modelFold_i : FNO          ; Untrained FNO model
-      - optimizer   : torch Adam   ; Adam optimizer from torch
-      - loss_fn     : nn.MSELoss   ; Mean square error loss for training
-      - params      : dict   ; Model and training parameters
+      - X           : torch tensor; Input torch tensor
+      - Y           : torch tensor; Output torch tensor
+      - modelFold_i : FNO         ; Untrained FNO model
+      - optimizer   : torch Adam  ; Adam optimizer from torch
+      - loss_fn     : nn.MSELoss  ; Mean square error loss for training
+      - params      : dict        ; Model and training parameters
     Output:
-      - modelFold_i : FNO ; Trained FNO model
+      - modelFold_i : FNO; Trained FNO model
+      - epoch       : int; Number of iterations for convergence 
     """
     ## Initialize
     prev_loss = 1
-    nb_maxIter = params.get('nb_maxTrainingIterations')
-    limLoss    = params.get('limitConvergenceLoss')
+    max_It    = params.get('maxIt')
+    min_loss  = params.get('minLoss')
+    losses    = []
 
     ## Run training
-    for epoch in range(nb_maxIter):
+    for epoch in range(max_It):
         optimizer.zero_grad()
         Y_pred = modelFold_i(X)
         loss = loss_fn(Y_pred, Y)
         loss.backward()
         optimizer.step()
-        if np.abs(loss.item()-prev_loss) < limLoss:
-            print("Converged in")
+        if np.abs(loss.item()-prev_loss) < min_loss:
+            print("Converged in: " + str(epoch) + ' iterations')
             break
         prev_loss = loss.item()
+        losses.append(prev_loss)
+        
+        # Print current state
+        print(f"Ablation {params.get('ablation')}; {params.get('fold')}; Epoch {epoch}; Loss = {loss.item():.6f}")
     
-    return modelFold_i
+    return modelFold_i, losses, epoch
 
 ############################################### LSTM Functions
 

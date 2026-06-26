@@ -11,6 +11,7 @@ Last modified: 06/2026
 import os
 import numpy as np
 import pickle
+import copy
 
 
 def get_all_folded_ablated_data(data_calib, data_assist, params_prepro):
@@ -27,95 +28,214 @@ def get_all_folded_ablated_data(data_calib, data_assist, params_prepro):
     """
     ## Initialization
     ablationsList = params_prepro.get('ablations')
+    outTypesList  = params_prepro.get('outTypes')
     foldsList     = params_prepro.get('folds')
     forceLoc      = params_prepro.get('forceLoc')
     savePath      = params_prepro.get('savePathPrepro')
 
-    savePathFile = savePath + 'velocity_2-fold.pkl'
+    savePathFile = savePath + 'velocity_pos_2-fold.pkl'
     if os.path.isfile(savePathFile):
         print('Folded and ablated data already computed.')
     else:
-        ## Loop over ablations and folds
+        ## Get the folds common to all ablations
         print('Computing folded and ablated datasets...')
+        dict_folds = {}
+        for fold in foldsList:
+            # Get folded data
+            folded_data = get_folds(data_calib, data_assist, fold, subj_col = -1)      
+            fold_name = fold + '-fold'
+            # Update folds dictionnary
+            dict_folds.update({fold_name: folded_data})
+
+        ## Get ablated matrices with always the same folds
+        # Loop over ablations of inputs
         all_folded_ablated_data = {}
         for ablation in ablationsList:
-            # Get ablated matrices
-            ablated_calib  = get_ablated_input(data_calib, data_to_remove = ablation, forceLoc = forceLoc)
-            ablated_assist = get_ablated_input(data_assist, data_to_remove = ablation, forceLoc = forceLoc)
-            
-            dict_folds = {}
-            for fold in foldsList:
-                # Get ablated and folded data
-                folded_data = get_folds(ablated_calib, ablated_assist, fold, subj_col = -1)
-                # Update folds dictionnary
-                fold_name = fold + '-fold'
-                dict_folds.update({fold_name: folded_data})
-            
+            # Loop over ablations of outputs
+            inout_ablated_data = {}
+            for out_type in outTypesList:
+                # Loop over possible numbers of folds
+                dict_foldsonly = {}
+                for fold in foldsList:
+                    folds_to_ablate_copy = {}
+                    fold_name = fold + '-fold' 
+                    folds_to_ablate = dict_folds.get(fold_name)
+                    folds_to_ablate_copy = copy.deepcopy(folds_to_ablate)
+
+                    # Loop over each fold
+                    for i in range(0,int(fold)):
+                        fold_id = 'fold' + str(i + 1)
+                        fold_i_data = folds_to_ablate_copy.get(fold_id)
+                        # Get training and evaluation data
+                        train_fold_i = fold_i_data.get('train_data')
+                        eval_fold_i  = fold_i_data.get('eval_data')
+                        # Ablate training and evaluation data
+                        ablated_train_fold_i = get_ablated_input(train_fold_i, data_to_remove = ablation, out_type = out_type, forceLoc = forceLoc)
+                        ablated_eval_fold_i  = get_ablated_input(eval_fold_i, data_to_remove = ablation, out_type = out_type, forceLoc = forceLoc)
+                        # Update dictionnary of 'k'-fold
+                        fold_i_data.update({'train_data': ablated_train_fold_i, 'eval_data': ablated_eval_fold_i})
+                        folds_to_ablate_copy.update({fold_id: fold_i_data})
+
+                    # Save ablated dictionnary of 'k'-fold
+                    dict_foldsonly.update({fold_name: folds_to_ablate_copy})
+
+                # Save folds for each output type
+                inout_ablated_data.update({out_type: dict_foldsonly})
+
             # Update final dictionnary
-            all_folded_ablated_data.update({ablation: dict_folds})
+            all_folded_ablated_data.update({ablation: inout_ablated_data})
 
         ## Save folded data to pickle
         for ablation in ablationsList:
-            ablated_data = all_folded_ablated_data.get(ablation)
-            for fold in foldsList:
-                fold_name = fold + '-fold'
-                ablatedFolded_data = ablated_data.get(fold_name)
-                savePathFile = savePath + ablation + '_' + fold_name + '.pkl'
-                with open(savePathFile, 'wb') as file:
-                    pickle.dump(ablatedFolded_data, file)
+            ablated_outdata = all_folded_ablated_data.get(ablation)
+            for out_type in outTypesList:
+                ablated_inoutdata = ablated_outdata.get(out_type)
+                for fold in foldsList:
+                    fold_name = fold + '-fold'
+                    ablatedFolded_data = ablated_inoutdata.get(fold_name)
+                    savePathFile = savePath + ablation + '_' + out_type + '_' + fold_name + '.pkl'
+                    with open(savePathFile, 'wb') as file:
+                        pickle.dump(ablatedFolded_data, file)
 
         print('All folded and ablated data computed and saved to pickle')
 
 
-def get_ablated_input(input_mat, data_to_remove = False, forceLoc = "wrist"):
+def get_ablated_input(input_mat, data_to_remove = False, out_type = 'pos_vel', forceLoc = "wrist"):
     """
     Function returning simplified input matrix for ablation studies.
 
     Args:
-      - input_mat      : len(batch)xIO array; Full input matrix [q3,q4,dq3,dq4,(FT_arm),FT_wrist,l_a,l_fa,mvt,subj,output]
+      - input_mat      : len(batch)xIO array; Full input matrix [q3,q4,dq3,dq4,(FT_arm),FT_wrist,l_a,l_fa,output[4cols],mvt,subj]
       - data_to_remove : string             ; Type of data to remove for ablation
+      - out_type       : string             ; Whether to predict position, velocity, or both
     Output:
       - ablated : 2D array; Ablated matrix
     """
-    if data_to_remove == "None":
-        print("No ablation requested. Initial matrix is returned.")
-        return input_mat
-    elif data_to_remove == "velocity":
-        return np.concatenate([input_mat[:,0:2], input_mat[:,4:]], axis = 1)
-    elif data_to_remove == "anthropo":
-        if forceLoc == "both":
-            return np.concatenate([input_mat[:,0:16], input_mat[:,18:]], axis = 1)
+    if out_type == "posvel":
+        if data_to_remove == "None":
+            # print("No ablation requested. Initial matrix is returned.")
+            return input_mat
+        elif data_to_remove == "all_but_pos":
+            return np.concatenate([input_mat[:,0:2], input_mat[:,-6:]], axis = 1)
+        elif data_to_remove == "all_but_posvel":
+            return np.concatenate([input_mat[:,0:4], input_mat[:,-6:]], axis = 1)
+        elif data_to_remove == "all_but_forcestorques":
+            return np.concatenate([input_mat[:,4:10], input_mat[:,-6:]], axis = 1)
+        elif data_to_remove == "all_but_forcestorquesant":
+            return input_mat[:,4:]
+        elif data_to_remove == "velocity":
+            return np.concatenate([input_mat[:,0:2], input_mat[:,4:]], axis = 1)
+        elif data_to_remove == "anthropo":
+            if forceLoc == "both":
+                return np.concatenate([input_mat[:,0:16], input_mat[:,18:]], axis = 1)
+            else:
+                return np.concatenate([input_mat[:,0:10], input_mat[:,12:]], axis = 1)
+        elif data_to_remove == "forcestorques":
+            if forceLoc == "both":
+                return np.concatenate([input_mat[:,0:4], input_mat[:,16:]], axis = 1)
+            else:
+                return np.concatenate([input_mat[:,0:4], input_mat[:,10:]], axis = 1)
+        elif data_to_remove == "forces":
+            if forceLoc == "both":
+                return np.concatenate([input_mat[:,0:4], input_mat[:,7:10], input_mat[:,13:]], axis = 1)
+            else:
+                return np.concatenate([input_mat[:,0:4], input_mat[:,7:]], axis = 1)
+        elif data_to_remove == "torques":
+            if forceLoc == "both":
+                return np.concatenate([input_mat[:,0:7], input_mat[:,10:13], input_mat[:,16:]], axis = 1)
+            else:
+                return np.concatenate([input_mat[:,0:7], input_mat[:,10:]], axis = 1)
+        elif data_to_remove == "Fx" and forceLoc == "wrist":
+            return np.delete(input_mat, 4, axis = 1)
+        elif data_to_remove == "Fy" and forceLoc == "wrist":
+            return np.delete(input_mat, 5, axis = 1)
+        elif data_to_remove == "Fz" and forceLoc == "wrist":
+            return np.delete(input_mat, 6, axis = 1)
+        elif data_to_remove == "Tx" and forceLoc == "wrist":
+            return np.delete(input_mat, 7, axis = 1)
+        elif data_to_remove == "Ty" and forceLoc == "wrist":
+            return np.delete(input_mat, 8, axis = 1)
+        elif data_to_remove == "Tz" and forceLoc == "wrist":
+            return np.delete(input_mat, 9, axis = 1)
         else:
-            return np.concatenate([input_mat[:,0:10], input_mat[:,12:]], axis = 1)
-    elif data_to_remove == "forcestorques":
-        if forceLoc == "both":
-            return np.concatenate([input_mat[:,0:4], input_mat[:,16:]], axis = 1)
+            print("Ablation case not handled. Initial matrix is returned.")
+            return input_mat
+    elif out_type == "pos":
+        if data_to_remove == "None":
+            # print("No ablation requested. Initial matrix without vel to predict is returned.")
+            return np.concatenate([input_mat[:,0:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "all_but_pos":
+            return np.concatenate([input_mat[:,0:2], input_mat[:,-6:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "all_but_posvel":
+            return np.concatenate([input_mat[:,0:4], input_mat[:,-6:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "all_but_forcestorques":
+            return np.concatenate([input_mat[:,4:10], input_mat[:,-6:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "all_but_forcestorquesant":
+            return np.concatenate([input_mat[:,4:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "velocity":
+            return np.concatenate([input_mat[:,0:2], input_mat[:,4:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "anthropo":
+            return np.concatenate([input_mat[:,0:10], input_mat[:,-6:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "forcestorques":
+            return np.concatenate([input_mat[:,0:4], input_mat[:,-8:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "forces":
+            return np.concatenate([input_mat[:,0:4], input_mat[:,7:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "torques":
+            return np.concatenate([input_mat[:,0:7], input_mat[:,-8:-4], input_mat[:,-2:]], axis = 1)
+        elif data_to_remove == "Fx" and forceLoc == "wrist":
+            return np.delete(input_mat, [4, 14, 15], axis = 1)
+        elif data_to_remove == "Fy" and forceLoc == "wrist":
+            return np.delete(input_mat, [5, 14, 15], axis = 1)
+        elif data_to_remove == "Fz" and forceLoc == "wrist":
+            return np.delete(input_mat, [6, 14, 15], axis = 1)
+        elif data_to_remove == "Tx" and forceLoc == "wrist":
+            return np.delete(input_mat, [7, 14, 15], axis = 1)
+        elif data_to_remove == "Ty" and forceLoc == "wrist":
+            return np.delete(input_mat, [8, 14, 15], axis = 1)
+        elif data_to_remove == "Tz" and forceLoc == "wrist":
+            return np.delete(input_mat, [9, 14, 15], axis = 1)
         else:
-            return np.concatenate([input_mat[:,0:4], input_mat[:,10:]], axis = 1)
-    elif data_to_remove == "forces":
-        if forceLoc == "both":
-            return np.concatenate([input_mat[:,0:4], input_mat[:,7:10], input_mat[:,13:]], axis = 1)
+            print("Ablation case not handled. Initial matrix is returned without vel to predict.")
+            return np.concatenate([input_mat[:,0:-4], input_mat[:,-2:]], axis = 1)
+    elif out_type == "vel":
+        if data_to_remove == "None":
+            # print("No ablation requested. Initial matrix without vel to predict is returned.")
+            return np.concatenate([input_mat[:,0:-6], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "all_but_pos":
+            return np.concatenate([input_mat[:,0:2], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "all_but_posvel":
+            return np.concatenate([input_mat[:,0:4], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "all_but_forcestorques":
+            return np.concatenate([input_mat[:,4:10], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "all_but_forcestorquesant":
+            return np.concatenate([input_mat[:,4:-6], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "velocity":
+            return np.concatenate([input_mat[:,0:2], input_mat[:,4:-6], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "anthropo":
+            return np.concatenate([input_mat[:,0:10], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "forcestorques":
+            return np.concatenate([input_mat[:,0:4], input_mat[:,-8:-6], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "forces":
+            return np.concatenate([input_mat[:,0:4], input_mat[:,7:-6], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "torques":
+            return np.concatenate([input_mat[:,0:7], input_mat[:,-8:-6], input_mat[:,-4:]], axis = 1)
+        elif data_to_remove == "Fx" and forceLoc == "wrist":
+            return np.delete(input_mat, [4, 12, 13], axis = 1)
+        elif data_to_remove == "Fy" and forceLoc == "wrist":
+            return np.delete(input_mat, [5, 12, 13], axis = 1)
+        elif data_to_remove == "Fz" and forceLoc == "wrist":
+            return np.delete(input_mat, [6, 12, 13], axis = 1)
+        elif data_to_remove == "Tx" and forceLoc == "wrist":
+            return np.delete(input_mat, [7, 12, 13], axis = 1)
+        elif data_to_remove == "Ty" and forceLoc == "wrist":
+            return np.delete(input_mat, [8, 12, 13], axis = 1)
+        elif data_to_remove == "Tz" and forceLoc == "wrist":
+            return np.delete(input_mat, [9, 12, 13], axis = 1)
         else:
-            return np.concatenate([input_mat[:,0:4], input_mat[:,7:]], axis = 1)
-    elif data_to_remove == "torques":
-        if forceLoc == "both":
-            return np.concatenate([input_mat[:,0:7], input_mat[:,10:13], input_mat[:,16:]], axis = 1)
-        else:
-            return np.concatenate([input_mat[:,0:7], input_mat[:,10:]], axis = 1)
-    elif data_to_remove == "Fx" and forceLoc == "wrist":
-        return np.delete(input_mat, 4, axis = 1)
-    elif data_to_remove == "Fy" and forceLoc == "wrist":
-        return np.delete(input_mat, 5, axis = 1)
-    elif data_to_remove == "Fz" and forceLoc == "wrist":
-        return np.delete(input_mat, 6, axis = 1)
-    elif data_to_remove == "Tx" and forceLoc == "wrist":
-        return np.delete(input_mat, 7, axis = 1)
-    elif data_to_remove == "Ty" and forceLoc == "wrist":
-        return np.delete(input_mat, 8, axis = 1)
-    elif data_to_remove == "Tz" and forceLoc == "wrist":
-        return np.delete(input_mat, 9, axis = 1)
+            print("Ablation case not handled. Initial matrix is returned without pos to predict.")
+            return np.concatenate([input_mat[:,0:-6], input_mat[:,-4:]], axis = 1)
     else:
-        print("Ablation case not handled. Initial matrix is returned.")
+        print("Ouput ablation case not handled. Initial matrix is returned.")
         return input_mat
 
 
@@ -138,7 +258,7 @@ def get_folds(calib_mat, assist_mat, nb_folds, subj_col = 0):
 
     ## Get list of folds sizes for each dataset
     fSizes_calib = get_fold_sizes(subjListCalib, nb_folds)
-    fSizes_assist = get_fold_sizes(subjListAssist, nb_folds)
+    fSizes_assist = get_fold_sizes(subjListAssist, nb_folds, expe = 'ASSIST')
 
     ## Get and return dictionnary of folded data with training and evaluation sets
     folded_data = get_eval_and_train_folds(calib_mat, assist_mat, fSizes_calib, fSizes_assist, subjListCalib, subjListAssist, subj_col = subj_col)
