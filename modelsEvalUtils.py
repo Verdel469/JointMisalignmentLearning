@@ -10,11 +10,14 @@ Last modified: 06/2026
 import os
 import numpy as np
 import pickle
+import torch
+import torch.nn as nn
 from neuralop.models import FNO
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 import pandas as pd
 # Local
+import motor_control_tools.signal as mct_sig
 import inverse_dynamics as invDyn
 
 def get_all_eval_params_dict(all_params, all_anthropo, saveDF_path = './all_params/'):
@@ -42,33 +45,39 @@ def get_all_eval_params_dict(all_params, all_anthropo, saveDF_path = './all_para
         pathData = dict_model.get('dataPath')
         with open(pathData, 'rb') as file:
             all_data = pickle.load(file)
+        
+        # Get path to model evaluation saving
+        path_eval = dict_model.get('savePath_eval')
 
-        # Loop over folds
-        nb_folds = dict_model.get('nb_folds')
-        for i in range(1, nb_folds + 1):
-            # Get model and fit time
-            fold_i  = 'fold' + str(i)
-            time_fold_i = 'fitTime' + fold_i
-            model_i = models_all_folds.get(fold_i)
-            time_i  = models_all_folds.get(time_fold_i)
-            dict_model.update({'fold_id': fold_i})
+        if os.path.isfile(path_eval):
+            print('Model already evaluated, results available at: ' + path_eval)
+        else:
+            # Loop over folds
+            nb_folds = dict_model.get('nb_folds')
+            all_metrics = []
+            for i in range(1, nb_folds + 1):
+                # Get model and fit time
+                fold_i  = 'fold' + str(i)
+                time_fold_i = 'fitTime' + fold_i
+                model_i = models_all_folds.get(fold_i)
+                time_i  = models_all_folds.get(time_fold_i)
+                dict_model.update({'fold_id': fold_i})
 
-            # Get training and evaluation data
-            train_data = all_data.get(fold_i).get('train_data')
-            eval_data  = all_data.get(fold_i).get('eval_data')
+                # Get training and evaluation data
+                train_data = all_data.get(fold_i).get('train_data')
+                eval_data  = all_data.get(fold_i).get('eval_data')
 
-            train_metrics = compute_eval_params(model_i, time_i, train_data, dict_model, all_anthropo, nb_joints = 2, type = 'train')
-            eval_metrics  = compute_eval_params(model_i, time_i, eval_data, dict_model, all_anthropo, nb_joints = 2, type = 'eval')
+                train_metrics = compute_eval_params(model_i, time_i, train_data, dict_model, all_anthropo, nb_joints = 2, type = 'train')
+                eval_metrics  = compute_eval_params(model_i, time_i, eval_data, dict_model, all_anthropo, nb_joints = 2, type = 'eval')
 
-            all_metrics.append(train_metrics)
-            all_metrics.append(eval_metrics)
+                all_metrics.append(train_metrics)
+                all_metrics.append(eval_metrics)
 
-    ## Get and save DataFrame of metrics
-    all_metrics_df = pd.concat(all_metrics, axis = 0)
-    pathSave = saveDF_path + 'all_eval_metrics_JMLearning.csv'
-    all_metrics_df.to_csv(pathSave, index = False)
+            ## Get and save DataFrame of metrics
+            all_metrics_df = pd.concat(all_metrics, axis = 0)
+            all_metrics_df.to_csv(path_eval, index = False)
 
-    return all_metrics_df
+    return 1
 
 
 def compute_eval_params(model, fitTime, eval_data, model_params, all_anthropo, nb_joints = 2, type = 'eval'):
@@ -120,55 +129,104 @@ def compute_eval_params(model, fitTime, eval_data, model_params, all_anthropo, n
     ## Loop over subjects
     for subject in subjList:
         # Get subject recorded data
-        eval_data_subj     = eval_data[eval_data[:,-1] == subject]
-        input_data_subj    = eval_data_subj[:,:-6].astype(float)
-        output_data_subj   = eval_data_subj[:,-6:-2].astype(float)
+        eval_data_subj = eval_data[eval_data[:,-1] == subject]
+        if out_type == 'posvel':
+            input_data_subj  = eval_data_subj[:,:-6].astype(float)
+            output_data_subj = eval_data_subj[:,-6:-2].astype(float)
+        else:
+            input_data_subj  = eval_data_subj[:,:-4].astype(float)
+            output_data_subj = eval_data_subj[:,-4:-2].astype(float)
+            
+        
         anthropo_data_subj = all_anthropo.get(subject)
 
         if model_name == "MVPR":
             input_data_subj = polyFeatures.fit_transform(input_data_subj)
 
-        pred_data_subj = model.predict(input_data_subj)
-        # Position RMS
-        qs_rms = compute_RMSerror(pred_data_subj[:,0], output_data_subj[:,0])
-        qe_rms = compute_RMSerror(pred_data_subj[:,1], output_data_subj[:,1])
-        # Velocity RMS
-        dqs_rms = compute_RMSerror(pred_data_subj[:,2], output_data_subj[:,2])
-        dqe_rms = compute_RMSerror(pred_data_subj[:,3], output_data_subj[:,3])
-        # Position AAE
-        qs_aae = compute_AAE(pred_data_subj[:,0], output_data_subj[:,0])
-        qe_aae = compute_AAE(pred_data_subj[:,1], output_data_subj[:,1])
-        # Velocity AAE
-        dqs_aae = compute_AAE(pred_data_subj[:,2], output_data_subj[:,2])
-        dqe_aae = compute_AAE(pred_data_subj[:,3], output_data_subj[:,3])
-        # Position MAX absolute error
-        qs_max = compute_MaxAbsError(pred_data_subj[:,0], output_data_subj[:,0])
-        qe_max = compute_MaxAbsError(pred_data_subj[:,1], output_data_subj[:,1])
-        # Velocity MAX error
-        dqs_max = compute_MaxAbsError(pred_data_subj[:,2], output_data_subj[:,2])
-        dqe_max = compute_MaxAbsError(pred_data_subj[:,3], output_data_subj[:,3])
-        # Position STD error
-        qs_std = compute_STD_error(pred_data_subj[:,0], output_data_subj[:,0])
-        qe_std = compute_STD_error(pred_data_subj[:,1], output_data_subj[:,1])
-        # Velocity STD error
-        dqs_std = compute_STD_error(pred_data_subj[:,2], output_data_subj[:,2])
-        dqe_std = compute_STD_error(pred_data_subj[:,3], output_data_subj[:,3])
+        if model_name == "FNO":
+            input_data_subj_torch = torch.from_numpy(input_data_subj).float()
+            input_data_subj_3D    = input_data_subj_torch.unsqueeze(0)
+            input_data_subj_FNO   = input_data_subj_3D.permute(0, 2, 1)
+            pred_data_subj_FNO    = model(input_data_subj_FNO)
+            pred_data_subj_3D     = pred_data_subj_FNO.permute(0, 2, 1)
+            pred_data_subj_2D     = pred_data_subj_3D.squeeze(0)
+            pred_data_subj        = pred_data_subj_2D.detach().numpy()
+        else:
+            pred_data_subj = model.predict(input_data_subj)
+        
+        # Get velocities by numerical differentiation if pos is the only predicted
+        if out_type == 'pos':
+            # Motion capture baseline
+            j_pos_filt       = mct_sig.filter(output_data_subj, 100, low_pass = 5, order = 5)
+            j_vel            = mct_sig.diff_keep_length(j_pos_filt, 100)
+            output_data_subj = np.concatenate((output_data_subj, j_vel), axis = 1)
+            # Prediction
+            j_pred_filt    = mct_sig.filter(pred_data_subj, 100, low_pass = 5, order = 5)
+            j_vel_pred     = mct_sig.diff_keep_length(j_pred_filt, 100)
+            pred_data_subj = np.concatenate((pred_data_subj, j_vel_pred), axis = 1)
+            
+        if out_type == 'pos' or out_type == 'posvel':
+            # Position RMS
+            qs_rms = compute_RMSerror(pred_data_subj[:,0], output_data_subj[:,0])
+            qe_rms = compute_RMSerror(pred_data_subj[:,1], output_data_subj[:,1])
+            # Position AAE
+            qs_aae = compute_AAE(pred_data_subj[:,0], output_data_subj[:,0])
+            qe_aae = compute_AAE(pred_data_subj[:,1], output_data_subj[:,1])
+            # Position MAX absolute error
+            qs_max = compute_MaxAbsError(pred_data_subj[:,0], output_data_subj[:,0])
+            qe_max = compute_MaxAbsError(pred_data_subj[:,1], output_data_subj[:,1])
+            # Position STD error
+            qs_std = compute_STD_error(pred_data_subj[:,0], output_data_subj[:,0])
+            qe_std = compute_STD_error(pred_data_subj[:,1], output_data_subj[:,1])
 
-        # Compute torques
-        tau_s_pred, tau_e_pred, tau_s, tau_e = compute_Torques(pred_data_subj, output_data_subj, anthropo_data_subj)
+            # Velocity RMS
+            dqs_rms = compute_RMSerror(pred_data_subj[:,2], output_data_subj[:,2])
+            dqe_rms = compute_RMSerror(pred_data_subj[:,3], output_data_subj[:,3])
+            # Velocity AAE
+            dqs_aae = compute_AAE(pred_data_subj[:,2], output_data_subj[:,2])
+            dqe_aae = compute_AAE(pred_data_subj[:,3], output_data_subj[:,3])
+            # Velocity MAX error
+            dqs_max = compute_MaxAbsError(pred_data_subj[:,2], output_data_subj[:,2])
+            dqe_max = compute_MaxAbsError(pred_data_subj[:,3], output_data_subj[:,3])
+            # Velocity STD error
+            dqs_std = compute_STD_error(pred_data_subj[:,2], output_data_subj[:,2])
+            dqe_std = compute_STD_error(pred_data_subj[:,3], output_data_subj[:,3])
 
-        # Torque RMS
-        ts_rms = compute_RMSerror(tau_s_pred, tau_s)
-        te_rms = compute_RMSerror(tau_e_pred, tau_e)
-        # Torque AAE
-        ts_aae = compute_AAE(tau_s_pred, tau_s)
-        te_aae = compute_AAE(tau_e_pred, tau_e)
-        # Torque MAX error
-        ts_max = compute_MaxAbsError(tau_s_pred, tau_s)
-        te_max = compute_MaxAbsError(tau_e_pred, tau_e)
-        # Torque STD error
-        ts_std = compute_STD_error(tau_s_pred, tau_s)
-        te_std = compute_STD_error(tau_e_pred, tau_e)
+            # Compute torques
+            tau_s_pred, tau_e_pred, tau_s, tau_e = compute_Torques(pred_data_subj, output_data_subj, anthropo_data_subj)
+            # Torque RMS
+            ts_rms = compute_RMSerror(tau_s_pred, tau_s)
+            te_rms = compute_RMSerror(tau_e_pred, tau_e)
+            # Torque AAE
+            ts_aae = compute_AAE(tau_s_pred, tau_s)
+            te_aae = compute_AAE(tau_e_pred, tau_e)
+            # Torque MAX error
+            ts_max = compute_MaxAbsError(tau_s_pred, tau_s)
+            te_max = compute_MaxAbsError(tau_e_pred, tau_e)
+            # Torque STD error
+            ts_std = compute_STD_error(tau_s_pred, tau_s)
+            te_std = compute_STD_error(tau_e_pred, tau_e)
+        
+        else:
+            # Position errors to None
+            qs_rms, qe_rms, qs_aae, qe_aae, qs_max, qe_max, qs_std, qe_std = None, None, None, None, None, None, None, None
+
+            # Velocity RMS
+            dqs_rms = compute_RMSerror(pred_data_subj[:,0], output_data_subj[:,0])
+            dqe_rms = compute_RMSerror(pred_data_subj[:,1], output_data_subj[:,1])
+            # Velocity AAE
+            dqs_aae = compute_AAE(pred_data_subj[:,0], output_data_subj[:,0])
+            dqe_aae = compute_AAE(pred_data_subj[:,1], output_data_subj[:,1])
+            # Velocity MAX error
+            dqs_max = compute_MaxAbsError(pred_data_subj[:,0], output_data_subj[:,0])
+            dqe_max = compute_MaxAbsError(pred_data_subj[:,1], output_data_subj[:,1])
+            # Velocity STD error
+            dqs_std = compute_STD_error(pred_data_subj[:,0], output_data_subj[:,0])
+            dqe_std = compute_STD_error(pred_data_subj[:,1], output_data_subj[:,1])
+
+            # Torque errors to None
+            ts_rms, te_rms, ts_aae, te_aae, ts_max, te_max, ts_std, te_std = None, None, None, None, None, None, None, None
+        
 
         # Store computed errors
         dict_errors = {'model'    : [model_name]*nb_joints, 'ablation' : [ablation]*nb_joints,
