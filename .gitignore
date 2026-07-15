@@ -4,4 +4,5 @@ all_params/folded_ablated_data
 **.pdf
 **.svg
 **.txt
-**.csv
+data_ASSIST/
+data_CALIB/
