@@ -1,3 +1,11 @@
+"""
+This file defines functions to import all data and store them before preprocessing.
+
+Author: Dorian Verdel [d.verdel@imperial.ac.uk]
+Created: 06/2026
+Last modified: 06/2026
+"""
+
 ## Imports
 # General
 import os

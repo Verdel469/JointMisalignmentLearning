@@ -2,7 +2,8 @@
 This file defines functions to prepare the folded and ablated data, and save the fitted models to pickle files.
 
 Author: Dorian Verdel [d.verdel@imperial.ac.uk]
-Last modified: 06/2026
+Created: 05/2026
+Last modified: 07/2026
 """
 
 

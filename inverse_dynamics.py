@@ -2,7 +2,8 @@
 This file defines functions to compute joints torques from trajectories.
 
 Author: Dorian Verdel [d.verdel@imperial.ac.uk]
-Last modified: 06/2026
+Created: 05/2026
+Last modified: 07/2026
 """
 
 ## Imports

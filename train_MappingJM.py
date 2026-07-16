@@ -2,7 +2,8 @@
 This file defines functions to train the different types of models: MVLR, MVPR, FNO, LSTM.
 
 Author: Dorian Verdel [d.verdel@imperial.ac.uk]
-Last modified: 06/2026
+Created: 06/2026
+Last modified: 07/2026
 """
 
 ## Imports
