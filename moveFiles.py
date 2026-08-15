@@ -40,42 +40,43 @@ import pickle
 #                     rm_fileName = dst_trial + fileToRemove
 #                     os.remove(rm_fileName)
 
-src_root = './SegmentedData/'
-# dst_root = './data_CALIB/'
+# src_root = './SegmentedData/'
+# # dst_root = './data_CALIB/'
 
-subjList = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S09', 'S10', 'S12', 'S14']
-src_conds = ['EG', 'ES', 'T']
-src_phases = ['PE', 'PS', 'RE', 'RS']
+# subjList = ['S01', 'S02', 'S03', 'S04', 'S05', 'S06', 'S09', 'S10', 'S12', 'S14']
+# src_conds = ['EG', 'ES', 'T']
+# src_phases = ['PE', 'PS', 'RE', 'RS']
 
-nb_present = 0
-nb_missing = 0
-list_missing = []
+# nb_present = 0
+# nb_missing = 0
+# list_missing = []
 
-for subject in subjList:
-    src_subj = src_root + subject + '/Assist2/'
+# for subject in subjList:
+#     src_subj = src_root + subject + '/Assist2/'
 
-    for cond in src_conds:
-        src_cond = src_subj + cond + '/'
-        list_src_trials = [d for d in os.listdir(src_cond) if os.path.isdir(os.path.join(src_cond, d))]
+#     for cond in src_conds:
+#         src_cond = src_subj + cond + '/'
+#         list_src_trials = [d for d in os.listdir(src_cond) if os.path.isdir(os.path.join(src_cond, d))]
 
-        for trial in list_src_trials:
-            src_trial = src_cond + trial + '/'
+#         for trial in list_src_trials:
+#             src_trial = src_cond + trial + '/'
 
-            for phase in src_phases:
-                src_phase = src_trial + phase + '/'
-                pathExoPos = src_phase + 'wristSensor.csv'
+#             for phase in src_phases:
+#                 src_phase = src_trial + phase + '/'
+#                 pathExoPos = src_phase + 'wristSensor.csv'
 
-                if os.path.isfile(pathExoPos):
-                    nb_present += 1
-                else:
-                    nb_missing += 1
-                    miss_file = subject + '_' + cond + '_' + trial + '_' + 'phase'
-                    list_missing.append(miss_file)
+#                 if os.path.isfile(pathExoPos):
+#                     nb_present += 1
+#                 else:
+#                     nb_missing += 1
+#                     miss_file = subject + '_' + cond + '_' + trial + '_' + 'phase'
+#                     list_missing.append(miss_file)
 
-percent_pres = nb_present / (nb_present + nb_missing) * 100
-percent_miss = nb_missing / (nb_present + nb_missing) * 100
-print('Number of present position files: ' + str(nb_present) + ' (' + str(percent_pres) + '%)')
-print('Number of missing position files: ' + str(nb_missing) + ' (' + str(percent_miss) + '%)')
+# percent_pres = nb_present / (nb_present + nb_missing) * 100
+# percent_miss = nb_missing / (nb_present + nb_missing) * 100
+# print('Number of present position files: ' + str(nb_present) + ' (' + str(percent_pres) + '%)')
+# print('Number of missing position files: ' + str(nb_missing) + ' (' + str(percent_miss) + '%)')
 
 # with open('missingPosFiles.pkl', 'wb') as file:
 #     pickle.dump(list_missing, file)
+

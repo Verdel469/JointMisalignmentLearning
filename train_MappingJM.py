@@ -32,6 +32,7 @@ def run_training(sharedList, listParamsDict, iter):
     model       = params_i.get('model')
     dataPath    = params_i.get('dataPath')
     ablation    = params_i.get('ablation')
+    data_type   = params_i.get('dataType')
     out_type    = params_i.get('out_type')
     foldName    = params_i.get('fold')
     saveDirFile = params_i.get('saveFittedDir')
@@ -44,7 +45,7 @@ def run_training(sharedList, listParamsDict, iter):
             data = pickle.load(file)
 
         ## Inform current step
-        print('Fitting ' + model + ', with ablation of ' + ablation + ' and predicting ' + out_type + ' with ' + foldName)
+        print(model + ': ablated ' + ablation + '; data ' + data_type + '; predict ' + out_type + '; ' + foldName)
 
         ## Get trained models (k models for each type of fitting)
         fitted_models = train_MappingJM(data, model, params = params_i)
@@ -93,6 +94,7 @@ def train_MVLR_Mappings(folded_data, params):
     ## Initialize
     models_MVLR = {}
     out_type    = params.get('out_type')
+    data_type   = params.get('dataType')
     nb_folds    = params.get('nb_folds')
 
     ## Loop over folds
@@ -100,6 +102,17 @@ def train_MVLR_Mappings(folded_data, params):
         # Get fold i
         fold_i = "fold" + str(i)
         train_data_fold_i = folded_data.get(fold_i).get("train_data")
+        
+        # Keep only relevant training data
+        if data_type == 'CALIB':
+            last_col = train_data_fold_i[:, -1].astype(str)
+            mask_calib = np.char.find(last_col, '_c') != -1
+            train_data_fold_i = train_data_fold_i[mask_calib, :]
+        elif data_type == 'ASSIST':
+            last_col = train_data_fold_i[:, -1].astype(str)
+            mask_assist = np.char.find(last_col, '_a') != -1
+            train_data_fold_i = train_data_fold_i[mask_assist, :]
+        
         # Get inputs and outputs
         if out_type == 'posvel':
             input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
@@ -135,6 +148,7 @@ def train_MVPR_Mappings(folded_data, params):
     ## Initialize
     models_MVPR = {}
     out_type    = params.get('out_type')
+    data_type   = params.get('dataType')
     nb_folds    = params.get('nb_folds')
     degree      = params.get('degree')
 
@@ -143,6 +157,17 @@ def train_MVPR_Mappings(folded_data, params):
         # Get fold i
         fold_i = "fold" + str(i)
         train_data_fold_i = folded_data.get(fold_i).get("train_data")
+
+        # Keep only relevant training data
+        if data_type == 'CALIB':
+            last_col = train_data_fold_i[:, -1].astype(str)
+            mask_calib = np.char.find(last_col, '_c') != -1
+            train_data_fold_i = train_data_fold_i[mask_calib, :]
+        elif data_type == 'ASSIST':
+            last_col = train_data_fold_i[:, -1].astype(str)
+            mask_assist = np.char.find(last_col, '_a') != -1
+            train_data_fold_i = train_data_fold_i[mask_assist, :]
+
         # Get inputs and outputs
         if out_type == 'posvel':
             input_data  = np.array(train_data_fold_i[:,:-6], dtype = np.float64)
@@ -180,6 +205,7 @@ def train_FNO_Mappings(folded_data, params):
     ## Initialize
     models_FNO = {}
     nb_folds   = params.get('nb_folds')
+    data_type   = params.get('dataType')
     nb_modes   = params.get('nbModes')
     nb_hChan   = params.get('nbHC')
 
@@ -188,6 +214,17 @@ def train_FNO_Mappings(folded_data, params):
         # Get fold i
         fold_i = "fold" + str(i)
         train_data_fold_i = folded_data.get(fold_i).get("train_data")
+
+        # Keep only relevant training data
+        if data_type == 'CALIB':
+            last_col = train_data_fold_i[:, -1].astype(str)
+            mask_calib = np.char.find(last_col, '_c') != -1
+            train_data_fold_i = train_data_fold_i[mask_calib, :]
+        elif data_type == 'ASSIST':
+            last_col = train_data_fold_i[:, -1].astype(str)
+            mask_assist = np.char.find(last_col, '_a') != -1
+            train_data_fold_i = train_data_fold_i[mask_assist, :]
+
         # Time before preprocessing and training
         timebef = time.time()
         # Get inputs and outputs
@@ -229,10 +266,15 @@ def get_tensorsFromMat(train_data_fold_i, params):
     """
     ## Initialize
     out_type  = params.get('out_type')
+    shuffle   = params.get('shuffle')
     batchSize = params.get('batchSize')
 
-    ## Get shuffled input and output data to have homogeneous batches
-    shuffled_data   = np.random.permutation(train_data_fold_i)
+    ## Get shuffled or not shuffled input and output data
+    if shuffle:
+        shuffled_data = np.random.permutation(train_data_fold_i)
+    else:
+        shuffled_data = train_data_fold_i
+
     if out_type == 'posvel':
         input_data      = shuffled_data[:,:-6]
         input_data_num  = input_data.astype(np.float64)
@@ -299,13 +341,12 @@ def train_FNO_oneFold(X, Y, modelFold_i, optimizer, loss_fn, params):
         loss.backward()
         optimizer.step()
         if np.abs(loss.item()-prev_loss) < min_loss:
-            print("Converged in: " + str(epoch) + ' iterations')
-            break
+            print("No change at epoch: " + str(epoch))
         prev_loss = loss.item()
         losses.append(prev_loss)
         
         # Print current state
-        print(f"Ablation {params.get('ablation')}; {params.get('fold')}; Epoch {epoch}; Loss = {loss.item():.6f}")
+        print(f"Data {params.get('dataType')}; out {params.get('out_type')}; ablated {params.get('ablation')}; {params.get('fold')}; batch {params.get('batchSize')}; shuffle {params.get('shuffle')}; Epoch {epoch}; Loss = {loss.item():.6f}")
     
     return modelFold_i, losses, epoch
 
