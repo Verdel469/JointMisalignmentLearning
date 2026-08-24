@@ -38,45 +38,48 @@ def get_all_eval_params_dict(all_params, all_anthropo, saveDF_path = './all_para
         # Get fitted models
         pathModel = dict_model.get('saveFittedDir')
         print('Working on model file: ' + pathModel)
-        with open(pathModel, 'rb') as file:
-            models = pickle.load(file)
-        models_all_folds = models.get('fitted_models')
+        try:
+            with open(pathModel, 'rb') as file:
+                models = pickle.load(file)
+            models_all_folds = models.get('fitted_models')
 
-        # Get folded ablated data
-        pathData = dict_model.get('dataPath')
-        with open(pathData, 'rb') as file:
-            all_data = pickle.load(file)
-        
-        # Get path to model evaluation saving
-        path_eval = dict_model.get('savePath_eval')
+            # Get folded ablated data
+            pathData = dict_model.get('dataPath')
+            with open(pathData, 'rb') as file:
+                all_data = pickle.load(file)
+            
+            # Get path to model evaluation saving
+            path_eval = dict_model.get('savePath_eval')
 
-        if os.path.isfile(path_eval):
-            print('Model already evaluated, results available at: ' + path_eval)
-        else:
-            # Loop over folds
-            nb_folds = dict_model.get('nb_folds')
-            all_metrics = []
-            for i in range(1, nb_folds + 1):
-                # Get model and fit time
-                fold_i  = 'fold' + str(i)
-                time_fold_i = 'fitTime' + fold_i
-                model_i = models_all_folds.get(fold_i)
-                time_i  = models_all_folds.get(time_fold_i)
-                dict_model.update({'fold_id': fold_i})
+            if os.path.isfile(path_eval):
+                print('Model already evaluated, results available at: ' + path_eval)
+            else:
+                # Loop over folds
+                nb_folds = dict_model.get('nb_folds')
+                all_metrics = []
+                for i in range(1, nb_folds + 1):
+                    # Get model and fit time
+                    fold_i  = 'fold' + str(i)
+                    time_fold_i = 'fitTime' + fold_i
+                    model_i = models_all_folds.get(fold_i)
+                    time_i  = models_all_folds.get(time_fold_i)
+                    dict_model.update({'fold_id': fold_i})
 
-                # Get training and evaluation data
-                train_data = all_data.get(fold_i).get('train_data')
-                eval_data  = all_data.get(fold_i).get('eval_data')
+                    # Get training and evaluation data
+                    train_data = all_data.get(fold_i).get('train_data')
+                    eval_data  = all_data.get(fold_i).get('eval_data')
 
-                train_metrics = compute_eval_params(model_i, time_i, train_data, dict_model, all_anthropo, nb_joints = 2, type = 'train')
-                eval_metrics  = compute_eval_params(model_i, time_i, eval_data, dict_model, all_anthropo, nb_joints = 2, type = 'eval')
+                    train_metrics = compute_eval_params(model_i, time_i, train_data, dict_model, all_anthropo, nb_joints = 2, type = 'train')
+                    eval_metrics  = compute_eval_params(model_i, time_i, eval_data, dict_model, all_anthropo, nb_joints = 2, type = 'eval')
 
-                all_metrics.append(train_metrics)
-                all_metrics.append(eval_metrics)
+                    all_metrics.append(train_metrics)
+                    all_metrics.append(eval_metrics)
 
-            ## Get and save DataFrame of metrics
-            all_metrics_df = pd.concat(all_metrics, axis = 0)
-            all_metrics_df.to_csv(path_eval, index = False)
+                ## Get and save DataFrame of metrics
+                all_metrics_df = pd.concat(all_metrics, axis = 0)
+                all_metrics_df.to_csv(path_eval, index = False)
+        except:
+            print("Model not fitted: " + pathModel)
 
     return 1
 
@@ -99,6 +102,7 @@ def compute_eval_params(model, fitTime, eval_data, model_params, all_anthropo, n
     list_dfErrors = []
     model_name      = model_params.get('model')
     ablation        = model_params.get('ablation')
+    data_type       = model_params.get('dataType')
     out_type        = model_params.get('out_type')
     fold_name       = model_params.get('fold')
     fold_id         = model_params.get('fold_id')
@@ -116,12 +120,14 @@ def compute_eval_params(model, fitTime, eval_data, model_params, all_anthropo, n
         nbModes   = model_params.get('nbModes')
         nbHC      = model_params.get('nbHC')
         maxIt     = model_params.get('maxIt')
+        shuffled  = str(model_params.get('shuffle'))
         # minLoss   = model_params.get('minLoss')
     else:
         batchSize = None
         nbModes   = None
         nbHC      = None
         maxIt     = None
+        shuffled  = None
         # minLoss   = None
 
     ## Extract information from input data matrix
@@ -233,8 +239,9 @@ def compute_eval_params(model, fitTime, eval_data, model_params, all_anthropo, n
         dict_errors = {'model'    : [model_name]*nb_joints, 'ablation' : [ablation]*nb_joints,
                        'predicted': [out_type]*nb_joints  , 'fold'     : [fold_name]*nb_joints,
                        'fold_id'  : [fold_id]*nb_joints   , 'type'     : [type]*nb_joints,
-                       'subject'  : [subject]*nb_joints   , 'joint'    : ['shoulder', 'elbow'],
-                       'polDegree': [degree]*nb_joints    , 'FNO_batch': [batchSize]*nb_joints,
+                       'dataType' : [data_type]*nb_joints , 'subject'  : [subject]*nb_joints,
+                       'joint'    : ['shoulder', 'elbow'] , 'polDegree': [degree]*nb_joints,
+                       'FNO_shuff': [shuffled]*nb_joints  , 'FNO_batch': [batchSize]*nb_joints,
                        'FNO_nbMod': [nbModes]*nb_joints   , 'FNO_nbHC' : [nbHC]*nb_joints,
                        'FNO_maxIt': [maxIt]*nb_joints     , 'fitTime'  : [fitTime]*nb_joints,
                        'posRMSE'  : [qs_rms, qe_rms]      , 'velRMSE'  : [dqs_rms, dqe_rms],
