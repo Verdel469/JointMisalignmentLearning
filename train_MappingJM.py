@@ -205,9 +205,10 @@ def train_FNO_Mappings(folded_data, params):
     ## Initialize
     models_FNO = {}
     nb_folds   = params.get('nb_folds')
-    data_type   = params.get('dataType')
+    data_type  = params.get('dataType')
     nb_modes   = params.get('nbModes')
     nb_hChan   = params.get('nbHC')
+    max_It     = params.get('maxIt')
 
     ## Loop over folds
     for i in range(1, nb_folds + 1):
@@ -238,11 +239,12 @@ def train_FNO_Mappings(folded_data, params):
             out_channels    = d_out
         )
         optimizer = torch.optim.Adam(modelFold_i.parameters(), lr=1e-3)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = max_It, eta_min = 1e-5)
         loss_fn = nn.MSELoss()
         # Run training loop
         nbIt_i = 'nbItConv' + fold_i
         loss_i = 'losses' + fold_i
-        modelFold_i, losses_i, nb_it_i = train_FNO_oneFold(X, Y, modelFold_i, optimizer, loss_fn, params)
+        modelFold_i, losses_i, nb_it_i = train_FNO_oneFold(X, Y, modelFold_i, optimizer, scheduler, loss_fn, params)
         # Get elapsed time during model creation and fitting
         elapsed = time.time() - timebef
         time_fold_i = 'fitTime' + fold_i
@@ -312,7 +314,7 @@ def get_tensorsFromMat(train_data_fold_i, params):
 
     return X, Y, d_in, d_out
 
-def train_FNO_oneFold(X, Y, modelFold_i, optimizer, loss_fn, params):
+def train_FNO_oneFold(X, Y, modelFold_i, optimizer, scheduler, loss_fn, params):
     """
     Run training loop of FNO model.
 
@@ -340,6 +342,7 @@ def train_FNO_oneFold(X, Y, modelFold_i, optimizer, loss_fn, params):
         loss = loss_fn(Y_pred, Y)
         loss.backward()
         optimizer.step()
+        scheduler.step()
         if np.abs(loss.item()-prev_loss) < min_loss:
             print("No change at epoch: " + str(epoch))
         prev_loss = loss.item()
