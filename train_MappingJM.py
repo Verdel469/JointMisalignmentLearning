@@ -349,7 +349,7 @@ def train_FNO_oneFold(X, Y, modelFold_i, optimizer, scheduler, loss_fn, params):
         losses.append(prev_loss)
         
         # Print current state
-        print(f"Data {params.get('dataType')}; out {params.get('out_type')}; ablated {params.get('ablation')}; {params.get('fold')}; batch {params.get('batchSize')}; shuffle {params.get('shuffle')}; Epoch {epoch}; Loss = {loss.item():.6f}")
+        print(f"Data {params.get('dataType')}; out {params.get('out_type')}; ablated {params.get('ablation')}; {params.get('fold')}; batch {params.get('batchSize')}; shuffle {params.get('shuffle')}; scheduler True; Epoch {epoch}; Loss = {loss.item():.6f}")
     
     return modelFold_i, losses, epoch
 
